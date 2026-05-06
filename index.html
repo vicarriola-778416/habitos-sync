@@ -388,6 +388,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
   <button class="tabnav-btn" id="tabSemBtn" onclick="switchTab('sem')">semanas</button>
   <button class="tabnav-btn" id="tabRunBtn" onclick="switchTab('run')">training running</button>
   <button class="tabnav-btn" id="tabEscBtn" onclick="switchTab('esc')">training escalada</button>
+  <button class="tabnav-btn" id="tabSegBtn" onclick="switchTab('seg')">seguimiento</button>
 </div>
 
 <div id="tabCal" class="tab-pane active">
@@ -519,7 +520,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
           <span>progresión de velocidad por tipo</span>
           <div class="chart-legend" id="chartLegend"></div>
         </div>
-        <canvas id="progressChart" height="200"></canvas>
+        <canvas id="progressChart" height="420"></canvas>
       </div>
     </div>
   </div>
@@ -711,36 +712,50 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
           <div id="pfLog" style="margin-top:8px;max-height:100px;overflow-y:auto;font-size:.44rem;color:var(--dim)"></div>
         </div>
 
-        <!-- Peso corporal -->
-        <div class="chart-wrap" style="margin-top:14px">
-          <div class="chart-title">
-            <span>peso corporal (kg)</span>
-            <div class="chart-legend" id="weightLegend"></div>
-          </div>
-          <canvas id="weightChart" height="220"></canvas>
-          <div style="display:grid;grid-template-columns:120px 80px auto;gap:6px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)">
-            <input class="field-inp" type="date" id="weightDate" style="height:26px;font-size:.48rem">
-            <input class="field-inp" type="number" id="weightKg" step="0.1" min="0" placeholder="kg" style="height:26px;font-size:.48rem">
-            <button class="save-btn" onclick="addWeightEntry()" style="height:26px;width:auto;padding:0 12px;margin:0;font-size:.46rem">+ agregar</button>
-          </div>
-          <div id="weightLog" style="margin-top:8px;max-height:100px;overflow-y:auto;font-size:.44rem;color:var(--dim)"></div>
-        </div>
-
-        <!-- Sueño (semanal) -->
-        <div class="chart-wrap" style="margin-top:14px">
-          <div class="chart-title">
-            <span>sleep score (garmin)</span>
-            <div class="chart-legend" id="sleepLegend"></div>
-          </div>
-          <canvas id="sleepChart" height="220"></canvas>
-          <div id="sleepStats" style="margin-top:8px;font-size:.44rem;color:var(--dim);padding-top:10px;border-top:1px solid var(--bd)"></div>
-        </div>
+        <!-- peso + sueño movidos al tab "seguimiento general" -->
       </div>
     </div>
   </div>
   <!-- ⑤ PROYECTOS -->
   <div class="sub-pane" id="escPaneProyectos">
     <div class="pane-wrap" id="escProyectosList"></div>
+  </div>
+</div>
+
+<!-- ── SEGUIMIENTO GENERAL TAB ──────────────────────────────────────── -->
+<div id="tabSeg" class="tab-pane">
+  <div class="pane-wrap" style="max-width:900px;margin:0 auto;padding:20px 12px">
+    <!-- Sleep Score semanal -->
+    <div class="chart-wrap">
+      <div class="chart-title">
+        <span>sleep score (garmin)</span>
+        <div class="chart-legend" id="sleepLegendGen"></div>
+      </div>
+      <canvas id="sleepChartGen" height="220"></canvas>
+      <div id="sleepStatsGen" style="margin-top:8px;font-size:.44rem;color:var(--dim);padding-top:10px;border-top:1px solid var(--bd)"></div>
+    </div>
+    <!-- Peso corporal semanal -->
+    <div class="chart-wrap" style="margin-top:18px">
+      <div class="chart-title">
+        <span>peso corporal (kg)</span>
+        <div class="chart-legend" id="weightLegendGen"></div>
+      </div>
+      <canvas id="weightChartGen" height="220"></canvas>
+      <div style="display:grid;grid-template-columns:120px 80px auto;gap:6px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)">
+        <input class="field-inp" type="date" id="weightDateGen" style="height:26px;font-size:.48rem">
+        <input class="field-inp" type="number" id="weightKgGen" step="0.1" min="0" placeholder="kg" style="height:26px;font-size:.48rem">
+        <button class="save-btn" onclick="addWeightEntry()" style="height:26px;width:auto;padding:0 12px;margin:0;font-size:.46rem">+ agregar</button>
+      </div>
+    </div>
+    <!-- Nutrición semanal -->
+    <div class="chart-wrap" style="margin-top:18px">
+      <div class="chart-title">
+        <span>nutrición semanal</span>
+        <div class="chart-legend" id="nutLegendGen"></div>
+      </div>
+      <canvas id="nutChartGen" height="260"></canvas>
+      <div id="nutStatsGen" style="margin-top:8px;font-size:.44rem;color:var(--dim);padding-top:10px;border-top:1px solid var(--bd)"></div>
+    </div>
   </div>
 </div>
 
@@ -2872,16 +2887,35 @@ function renderLog(){
     }
     html+='</div>';
   }
-  // Nutrition summary (from MFP) — read-only, shown if any macros present.
-  if(selDay && dd.calories){
-    html+='<div class="habit-block" style="border-top:1px solid var(--bd);padding-top:6px;margin-top:4px">';
-    html+='<div class="habit-label"><div class="hdot" style="background:#0073cf"></div>MyFitnessPal</div>';
-    html+='<div style="display:flex;gap:12px;font-size:.52rem;color:var(--ink)">';
-    html+='<span style="font-weight:600">'+dd.calories+' kcal</span>';
-    if(dd.protein_g) html+='<span>P '+dd.protein_g+'g</span>';
-    if(dd.carbs_g)   html+='<span>C '+dd.carbs_g+'g</span>';
-    if(dd.fat_g)     html+='<span>F '+dd.fat_g+'g</span>';
-    html+='</div></div>';
+  // Nutrition inputs (manual or auto-filled from MFP)
+  if(selDay){
+    var calT = dd.cal_total || dd.calories || '';
+    var calN = dd.cal_net || dd.net_calories || '';
+    var proG = dd.prot_g || dd.protein_g || '';
+    var proGoal = getProteinGoal();
+    // Color coding
+    var netCol = calN ? (calN <= NET_CAL_GOAL ? 'var(--green)' : 'var(--red)') : 'var(--dim)';
+    var proCol = proG ? (proG >= proGoal ? 'var(--green)' : 'var(--red)') : 'var(--dim)';
+    html+='<div class="habit-block" style="border-top:1px solid var(--bd);padding-top:6px;margin-top:2px">';
+    html+='<div class="habit-label"><div class="hdot" style="background:#0073cf"></div>Nutrición</div>';
+    // Calories total
+    html+='<div style="display:flex;gap:6px;align-items:center;margin:4px 0">';
+    html+='<label style="font-size:.46rem;color:var(--dim);width:56px">cal total</label>';
+    html+='<input type="number" class="field-inp" style="height:24px;width:70px;font-size:.5rem;text-align:center" value="'+(calT||'')+'" onchange="setNut(\'cal_total\',this.value)">';
+    html+='</div>';
+    // Net calories vs goal
+    html+='<div style="display:flex;gap:6px;align-items:center;margin:4px 0">';
+    html+='<label style="font-size:.46rem;color:var(--dim);width:56px">cal netas</label>';
+    html+='<input type="number" class="field-inp" style="height:24px;width:70px;font-size:.5rem;text-align:center;color:'+netCol+';font-weight:600" value="'+(calN||'')+'" onchange="setNut(\'cal_net\',this.value)">';
+    html+='<span style="font-size:.42rem;color:'+netCol+'">/ '+NET_CAL_GOAL+'</span>';
+    html+='</div>';
+    // Protein vs goal
+    html+='<div style="display:flex;gap:6px;align-items:center;margin:4px 0">';
+    html+='<label style="font-size:.46rem;color:var(--dim);width:56px">proteína</label>';
+    html+='<input type="number" class="field-inp" style="height:24px;width:70px;font-size:.5rem;text-align:center;color:'+proCol+';font-weight:600" value="'+(proG||'')+'" onchange="setNut(\'prot_g\',this.value)">';
+    html+='<span style="font-size:.42rem;color:'+proCol+'">/ '+proGoal+'g ('+PROTEIN_PER_KG+'×'+getLatestWeight()+'kg)</span>';
+    html+='</div>';
+    html+='</div>';
   }
   lgC.innerHTML=html;
 }
@@ -2976,8 +3010,8 @@ function toggleSem(wi){
 
 // ── TABS ──────────────────────────────────────────────────────────────
 function switchTab(tab){
-  var panes=['Cal','Sem','Run','Esc'];
-  var btns=['Cal','Sem','Run','Esc'];
+  var panes=['Cal','Sem','Run','Esc','Seg'];
+  var btns=['Cal','Sem','Run','Esc','Seg'];
   panes.forEach(function(p){
     var el=document.getElementById('tab'+p);
     if(el) el.classList.remove('active');
@@ -2993,6 +3027,7 @@ function switchTab(tab){
   if(tab==='sem') renderSemanas();
   if(tab==='run') renderDiseno();
   if(tab==='esc') { renderEscDiseno(); switchEscSub('Diseno'); }
+  if(tab==='seg') renderSegGeneral();
 }
 
 // ── MUTATIONS ─────────────────────────────────────────────────────────
@@ -3005,6 +3040,16 @@ function adjS(delta){
   tData[key]._suenoFromFit=false;   // user override wins over Google Fit
   markDirty();renderLog();renderCal();renderWall();
   try { renderSleepChart&&renderSleepChart(); } catch(e){}
+}
+// Nutrition fields: manual input for cal_total, cal_net, prot_g.
+function setNut(field, val){
+  if(!selDay) return;
+  var key=dk(cy,cm,selDay);
+  if(!tData[key]) tData[key]={};
+  var n = parseInt(val);
+  tData[key][field] = isNaN(n) ? null : n;
+  tData[key]._nutFromMfp = false; // manual override
+  markDirty(); renderLog();
 }
 // Garmin Sleep Score: integer 0–100. Separate from hours. Manual for now
 // (Garmin doesn't export score to Google Fit via Health Sync).
@@ -3714,8 +3759,9 @@ function renderProgressChart(){
   if(!canvas) return;
   var ctx=canvas.getContext('2d');
   var W=canvas.parentElement.offsetWidth-28;
+  var H=420;
   canvas.width=W; canvas.style.width=W+'px';
-  var H=200; canvas.height=H; canvas.style.height=H+'px';
+  canvas.height=H; canvas.style.height=H+'px';
   ctx.clearRect(0,0,W,H);
 
   var types=['Easy','Intervals','ST','MT','LT','Long'];
@@ -3725,6 +3771,8 @@ function renderProgressChart(){
   // collect data: for each type, array of {week, speedIdx}
   var seriesData={};
   types.forEach(function(t){ seriesData[t]=[]; });
+  // Also collect compliance % per week
+  var weekPct=[];
   for(var w=1;w<=weeks;w++){
     var logs=runLog[segSelectedMacro]&&runLog[segSelectedMacro][w]?runLog[segSelectedMacro][w]:[];
     logs.forEach(function(l){
@@ -3732,6 +3780,21 @@ function renderProgressChart(){
       var idx=getSpeedIndex(l.speed);
       if(idx>=0) seriesData[l.type].push({week:w,idx:idx});
     });
+    // Compliance for this week
+    var plan=runPlan[segSelectedMacro]&&runPlan[segSelectedMacro][w]?runPlan[segSelectedMacro][w]:{};
+    var meso=getMesoById(segSelectedMacro,plan.mesoId);
+    var pct=null;
+    if(meso){
+      var req=meso.sessions.filter(function(s){return s.req;}).length;
+      if(req>0){
+        var done=0;
+        meso.sessions.filter(function(s){return s.req;}).forEach(function(s){
+          if(logs.some(function(l){return l.type===s.t;})) done++;
+        });
+        pct=Math.round(done/req*100);
+      }
+    }
+    weekPct.push(pct);
   }
 
   var hasData=types.some(function(t){return seriesData[t].length>0;});
@@ -3743,51 +3806,67 @@ function renderProgressChart(){
     return;
   }
 
-  var PAD={top:14,right:16,bottom:28,left:36};
+  // Larger padding for labels with pace
+  var PAD={top:14,right:16,bottom:48,left:72};
   var cW=W-PAD.left-PAD.right, cH=H-PAD.top-PAD.bottom;
   var maxIdx=SPEEDS.length-1; // 0-20
 
-  // grid lines
-  ctx.strokeStyle='rgba(194,200,216,0.4)'; ctx.lineWidth=0.5;
-  for(var g=0;g<=5;g++){
-    var y=PAD.top+cH-(g/5)*cH;
-    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+cW,y); ctx.stroke();
-    var lbl=SPEEDS[Math.round(g/5*maxIdx)];
-    ctx.fillStyle='rgba(140,151,176,0.9)';
-    ctx.font='9px DM Mono,monospace'; ctx.textAlign='right';
-    ctx.fillText(lbl?lbl.label:'',PAD.left-4,y+3);
+  function toX(w){ return PAD.left+(w-1)/(Math.max(weeks-1,1))*cW; }
+  function toY(idx){ return PAD.top+cH-(idx/maxIdx)*cH; }
+
+  // Horizontal grid lines for EVERY speed level (Easy, N1–N20)
+  for(var si=0;si<SPEEDS.length;si++){
+    var yy=toY(si);
+    ctx.strokeStyle=si%4===0?'rgba(194,200,216,0.5)':'rgba(194,200,216,0.2)';
+    ctx.lineWidth=si%4===0?0.7:0.4;
+    ctx.beginPath(); ctx.moveTo(PAD.left,yy); ctx.lineTo(PAD.left+cW,yy); ctx.stroke();
+    // Label: "N12 4:13" on every level
+    ctx.fillStyle=si%2===0?'rgba(100,110,140,0.9)':'rgba(140,151,176,0.6)';
+    ctx.font=(si%2===0?'9':'8')+'px DM Mono,monospace'; ctx.textAlign='right';
+    ctx.fillText(SPEEDS[si].label+' '+SPEEDS[si].pace, PAD.left-5, yy+3);
   }
 
-  // x axis labels
-  ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='center';
-  var step=Math.max(1,Math.floor(weeks/8));
-  for(var wx=1;wx<=weeks;wx+=step){
-    var x=PAD.left+(wx-1)/(weeks-1)*cW;
-    ctx.fillText(wx,x,H-PAD.bottom+14);
+  // Vertical grid per week + week number + compliance %
+  for(var wx=1;wx<=weeks;wx++){
+    var xx=toX(wx);
+    ctx.strokeStyle='rgba(194,200,216,0.15)'; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(xx,PAD.top); ctx.lineTo(xx,PAD.top+cH); ctx.stroke();
+    // Week number
+    ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='center';
+    ctx.fillText(wx, xx, H-PAD.bottom+14);
+    // Compliance % below week number
+    var p=weekPct[wx-1];
+    if(p!==null){
+      var pCol=p===100?'#1a9e50':p>0?'#d4670a':'#e03050';
+      ctx.fillStyle=pCol; ctx.font='bold 8px DM Mono,monospace';
+      ctx.fillText(p+'%', xx, H-PAD.bottom+26);
+    }
   }
 
-  // draw series
+  // Draw series lines + dots
   types.forEach(function(t){
     var pts=seriesData[t];
     if(pts.length===0) return;
     var c=TYPE_COLORS[t]||'#888';
-    ctx.strokeStyle=c; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.strokeStyle=c; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.lineJoin='round';
     ctx.beginPath();
     pts.forEach(function(p,i){
-      var x=PAD.left+(p.week-1)/(Math.max(weeks-1,1))*cW;
-      var y=PAD.top+cH-(p.idx/maxIdx)*cH;
+      var x=toX(p.week), y=toY(p.idx);
       if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     });
     ctx.stroke();
-    // dots
+    // Dots with speed label
     pts.forEach(function(p){
-      var x=PAD.left+(p.week-1)/(Math.max(weeks-1,1))*cW;
-      var y=PAD.top+cH-(p.idx/maxIdx)*cH;
-      ctx.fillStyle=c; ctx.beginPath(); ctx.arc(x,y,3,0,2*Math.PI); ctx.fill();
+      var x=toX(p.week), y=toY(p.idx);
+      ctx.fillStyle=c;
+      ctx.beginPath(); ctx.arc(x,y,4,0,2*Math.PI); ctx.fill();
+      // White border for visibility
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(x,y,4,0,2*Math.PI); ctx.stroke();
     });
   });
 
-  // legend
+  // Legend
   var legHtml='';
   types.forEach(function(t){
     if(seriesData[t].length>0)
@@ -4798,8 +4877,16 @@ function renderPfLog(){
   el.innerHTML=html;
 }
 
-// ── PESO CORPORAL ─────────────────────────────────────────────────────
+// ── METAS ─────────────────────────────────────────────────────────────
 var WEIGHT_GOAL = 71.0; // kg
+var NET_CAL_GOAL = 1880; // kcal netas diarias (comida − ejercicio)
+var PROTEIN_PER_KG = 1.5; // g de proteína por kg de peso
+
+function getLatestWeight(){
+  if (typeof weightData==='undefined' || !weightData.length) return 80;
+  return weightData[weightData.length-1].kg;
+}
+function getProteinGoal(){ return Math.round(getLatestWeight() * PROTEIN_PER_KG); }
 
 function addWeightEntry(){
   var d=document.getElementById('weightDate').value;
@@ -5097,6 +5184,196 @@ function renderWeightLog(){
       +'</div>';
   });
   el.innerHTML=html;
+}
+
+// ── SEGUIMIENTO GENERAL TAB ──────────────────────────────────────────
+function renderSegGeneral(){
+  renderWeightChartOn('weightChartGen','weightLegendGen');
+  renderSleepChartOn('sleepChartGen','sleepLegendGen','sleepStatsGen');
+  renderNutritionChart();
+}
+
+// Generic weight chart renderer that accepts target canvas/legend IDs
+function renderWeightChartOn(canvasId, legendId){
+  var canvas=document.getElementById(canvasId); if(!canvas) return;
+  var ctx=canvas.getContext('2d');
+  var W=canvas.parentElement.offsetWidth-28; var H=220;
+  canvas.width=W; canvas.style.width=W+'px';
+  canvas.height=H; canvas.style.height=H+'px';
+  ctx.clearRect(0,0,W,H);
+  if(!weightData||weightData.length===0){
+    ctx.fillStyle='rgba(194,200,216,0.5)'; ctx.font='11px DM Mono,monospace'; ctx.textAlign='center';
+    ctx.fillText('agrega tu primer pesaje',W/2,H/2);
+    return;
+  }
+  var weekMap={};
+  weightData.forEach(function(p){ var wk=weightWeekKey(p.date); if(!weekMap[wk]) weekMap[wk]=[]; weekMap[wk].push(p.kg); });
+  var wkKeys=Object.keys(weekMap).sort();
+  function wStats(arr){ var s=arr.slice().sort(function(a,b){return a-b;}); var n=s.length; var med=n%2===1?s[Math.floor(n/2)]:Math.round((s[n/2-1]+s[n/2])*10/2)/10; return {min:s[0],med:med,max:s[n-1],n:n}; }
+  var series=wkKeys.map(function(wk){ return wStats(weekMap[wk]); });
+  var allVals=[]; series.forEach(function(s){ allVals.push(s.min,s.max); }); allVals.push(WEIGHT_GOAL);
+  var minY=Math.floor(Math.min.apply(null,allVals))-1; var maxY=Math.ceil(Math.max.apply(null,allVals))+1; var range=maxY-minY||5;
+  var PAD={top:16,right:16,bottom:36,left:44}; var cW=W-PAD.left-PAD.right; var cH=H-PAD.top-PAD.bottom; var n=wkKeys.length;
+  function toX(i){ return PAD.left+(n<2?cW/2:i/(n-1)*cW); }
+  function toY(v){ return PAD.top+cH-((v-minY)/range)*cH; }
+  ctx.strokeStyle='rgba(194,200,216,0.35)'; ctx.lineWidth=0.5;
+  for(var g=0;g<=4;g++){ var yg=PAD.top+cH-(g/4)*cH; ctx.beginPath(); ctx.moveTo(PAD.left,yg); ctx.lineTo(PAD.left+cW,yg); ctx.stroke(); ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='right'; ctx.fillText((minY+g/4*range).toFixed(1),PAD.left-4,yg+3); }
+  ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='8px DM Mono,monospace'; ctx.textAlign='center';
+  wkKeys.forEach(function(wk,i){ var step=Math.max(1,Math.floor(n/8)); if(n>1&&i%step!==0&&i!==n-1) return; var parts=wk.split('-'); ctx.fillText(parts[2]+'/'+parts[1],toX(i),H-PAD.bottom+14); });
+  var gy=toY(WEIGHT_GOAL); ctx.strokeStyle='rgba(26,158,80,0.6)'; ctx.lineWidth=1.2; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(PAD.left,gy); ctx.lineTo(PAD.left+cW,gy); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle='rgba(26,158,80,0.8)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='left'; ctx.fillText('meta '+WEIGHT_GOAL+' kg',PAD.left+4,gy-4);
+  function drawLine(colour,accessor,width){ ctx.strokeStyle=colour; ctx.lineWidth=width||2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.beginPath(); var started=false; series.forEach(function(s,i){ var y=toY(accessor(s)); if(!started){ctx.moveTo(toX(i),y);started=true;} else ctx.lineTo(toX(i),y); }); ctx.stroke(); }
+  drawLine('rgba(219,72,122,0.75)',function(s){return s.max;},1.6);
+  drawLine('rgba(232,152,45,0.85)',function(s){return s.min;},1.6);
+  drawLine('#2d6ee8',function(s){return s.med;},2.6);
+  series.forEach(function(s,i){ ctx.fillStyle='#2d6ee8'; ctx.beginPath(); ctx.arc(toX(i),toY(s.med),3,0,2*Math.PI); ctx.fill(); if(n<=12){ ctx.fillStyle='rgba(45,110,232,0.85)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='center'; ctx.fillText(s.med.toFixed(1),toX(i),toY(s.med)-7); } });
+  var legEl=document.getElementById(legendId);
+  if(legEl) legEl.innerHTML='<div class="chart-leg-item"><div class="chart-leg-dot" style="background:rgba(219,72,122,0.75)"></div>max</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:#2d6ee8"></div>mediana</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:rgba(232,152,45,0.85)"></div>min</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:#1a9e50"></div>meta</div>';
+}
+
+// Generic sleep chart renderer
+function renderSleepChartOn(canvasId, legendId, statsId){
+  var canvas=document.getElementById(canvasId); if(!canvas) return;
+  var ctx=canvas.getContext('2d');
+  var W=canvas.parentElement.offsetWidth-28; var H=220;
+  canvas.width=W; canvas.style.width=W+'px'; canvas.height=H; canvas.style.height=H+'px';
+  ctx.clearRect(0,0,W,H);
+  var byDate={};
+  if(typeof tData!=='undefined'){ Object.keys(tData).forEach(function(d){ var v=tData[d]&&tData[d].sleepScore; if(typeof v==='number') byDate[d]=v; }); }
+  var dates=Object.keys(byDate); var statsEl=document.getElementById(statsId);
+  if(!dates.length){ ctx.fillStyle='rgba(194,200,216,0.5)'; ctx.font='11px DM Mono,monospace'; ctx.textAlign='center'; ctx.fillText('ingresá tu sleep score de Garmin',W/2,H/2); if(document.getElementById(legendId)) document.getElementById(legendId).innerHTML=''; if(statsEl) statsEl.innerHTML=''; return; }
+  var weekMap={}; dates.forEach(function(d){ var wk=weightWeekKey(d); if(!weekMap[wk]) weekMap[wk]=[]; weekMap[wk].push(byDate[d]); });
+  var wkKeys=Object.keys(weekMap).sort();
+  function stats(arr){ var s=arr.slice().sort(function(a,b){return a-b;}); var sum=0; for(var i=0;i<s.length;i++) sum+=s[i]; return {min:s[0],max:s[s.length-1],avg:Math.round(sum/s.length),n:s.length}; }
+  var series=wkKeys.map(function(wk){ return stats(weekMap[wk]); });
+  var SLEEP_GOAL=80; var allVals=[]; series.forEach(function(s){ allVals.push(s.min,s.max); }); allVals.push(SLEEP_GOAL);
+  var minY=Math.max(0,Math.floor(Math.min.apply(null,allVals)/5)*5-5); var maxY=Math.min(100,Math.ceil(Math.max.apply(null,allVals)/5)*5+5); if(maxY-minY<20) maxY=Math.min(100,minY+20); var range=maxY-minY;
+  var PAD={top:16,right:16,bottom:36,left:44}; var cW=W-PAD.left-PAD.right; var cH=H-PAD.top-PAD.bottom; var n=wkKeys.length;
+  function toX(i){ return PAD.left+(n<2?cW/2:i/(n-1)*cW); }
+  function toY(v){ return PAD.top+cH-((v-minY)/range)*cH; }
+  ctx.strokeStyle='rgba(194,200,216,0.35)'; ctx.lineWidth=0.5;
+  for(var g=0;g<=4;g++){ var yg=PAD.top+cH-(g/4)*cH; ctx.beginPath(); ctx.moveTo(PAD.left,yg); ctx.lineTo(PAD.left+cW,yg); ctx.stroke(); ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='right'; ctx.fillText(Math.round(minY+g/4*range),PAD.left-4,yg+3); }
+  ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='8px DM Mono,monospace'; ctx.textAlign='center';
+  wkKeys.forEach(function(wk,i){ var step=Math.max(1,Math.floor(n/8)); if(n>1&&i%step!==0&&i!==n-1) return; var parts=wk.split('-'); ctx.fillText(parts[2]+'/'+parts[1],toX(i),H-PAD.bottom+14); });
+  var gy=toY(SLEEP_GOAL); ctx.strokeStyle='rgba(26,158,80,0.6)'; ctx.lineWidth=1.2; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(PAD.left,gy); ctx.lineTo(PAD.left+cW,gy); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle='rgba(26,158,80,0.8)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='left'; ctx.fillText('meta 80',PAD.left+4,gy-4);
+  function drawLine(colour,accessor,width){ ctx.strokeStyle=colour; ctx.lineWidth=width||2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.beginPath(); var started=false; series.forEach(function(s,i){ var y=toY(accessor(s)); if(!started){ctx.moveTo(toX(i),y);started=true;} else ctx.lineTo(toX(i),y); }); ctx.stroke(); }
+  drawLine('rgba(146,84,222,0.75)',function(s){return s.max;},1.6);
+  drawLine('rgba(232,152,45,0.85)',function(s){return s.min;},1.6);
+  drawLine('#2d6ee8',function(s){return s.avg;},2.6);
+  series.forEach(function(s,i){ ctx.fillStyle='#2d6ee8'; ctx.beginPath(); ctx.arc(toX(i),toY(s.avg),3,0,2*Math.PI); ctx.fill(); if(n<=12){ ctx.fillStyle='rgba(45,110,232,0.85)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='center'; ctx.fillText(String(s.avg),toX(i),toY(s.avg)-7); } });
+  var legEl=document.getElementById(legendId);
+  if(legEl) legEl.innerHTML='<div class="chart-leg-item"><div class="chart-leg-dot" style="background:rgba(146,84,222,0.75)"></div>max</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:#2d6ee8"></div>promedio</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:rgba(232,152,45,0.85)"></div>min</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:#1a9e50"></div>meta</div>';
+  if(statsEl){ var recent=series.slice(-4); if(recent.length){ var rs=stats(recent.map(function(r){return r.avg;})); statsEl.innerHTML='últimas '+recent.length+' sem · promedio '+rs.avg+' · '+dates.length+' noches'; } }
+}
+
+// Weekly nutrition chart: net calories + protein bars
+function renderNutritionChart(){
+  var canvas=document.getElementById('nutChartGen'); if(!canvas) return;
+  var ctx=canvas.getContext('2d');
+  var W=canvas.parentElement.offsetWidth-28; var H=260;
+  canvas.width=W; canvas.style.width=W+'px'; canvas.height=H; canvas.style.height=H+'px';
+  ctx.clearRect(0,0,W,H);
+
+  // Collect daily net calories + protein from tData
+  var byDate={};
+  if(typeof tData!=='undefined'){
+    Object.keys(tData).forEach(function(d){
+      var dd=tData[d]; if(!dd) return;
+      var nc=dd.cal_net||dd.net_calories||null;
+      var pr=dd.prot_g||dd.protein_g||null;
+      if(nc||pr) byDate[d]={net:nc||0,prot:pr||0};
+    });
+  }
+  var dates=Object.keys(byDate);
+  var statsEl=document.getElementById('nutStatsGen');
+  if(!dates.length){
+    ctx.fillStyle='rgba(194,200,216,0.5)'; ctx.font='11px DM Mono,monospace'; ctx.textAlign='center';
+    ctx.fillText('ingresá calorías netas y proteína en el calendario',W/2,H/2);
+    if(document.getElementById('nutLegendGen')) document.getElementById('nutLegendGen').innerHTML='';
+    if(statsEl) statsEl.innerHTML=''; return;
+  }
+
+  // Group by week → avg net cal + avg protein
+  var weekMap={};
+  dates.forEach(function(d){ var wk=weightWeekKey(d); if(!weekMap[wk]) weekMap[wk]=[]; weekMap[wk].push(byDate[d]); });
+  var wkKeys=Object.keys(weekMap).sort();
+  var series=wkKeys.map(function(wk){
+    var arr=weekMap[wk]; var sN=0,sP=0;
+    arr.forEach(function(a){sN+=a.net;sP+=a.prot;});
+    return {avgNet:Math.round(sN/arr.length),avgProt:Math.round(sP/arr.length),n:arr.length};
+  });
+
+  var PAD={top:20,right:16,bottom:36,left:50};
+  var cW=W-PAD.left-PAD.right; var cH=H-PAD.top-PAD.bottom;
+  var n=wkKeys.length;
+  var barW=Math.min(30,cW/n*0.35);
+
+  // Y axis: net calories (left side)
+  var allNet=series.map(function(s){return s.avgNet;}); allNet.push(NET_CAL_GOAL);
+  var maxNet=Math.max.apply(null,allNet)*1.15;
+  function toX(i){ return PAD.left+(n<2?cW/2:(i+0.5)/n*cW); }
+  function toYNet(v){ return PAD.top+cH-(v/maxNet)*cH; }
+
+  // Grid
+  ctx.strokeStyle='rgba(194,200,216,0.35)'; ctx.lineWidth=0.5;
+  for(var g=0;g<=4;g++){
+    var yg=PAD.top+cH-(g/4)*cH;
+    ctx.beginPath(); ctx.moveTo(PAD.left,yg); ctx.lineTo(PAD.left+cW,yg); ctx.stroke();
+    ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='right';
+    ctx.fillText(Math.round(g/4*maxNet),PAD.left-4,yg+3);
+  }
+  // X labels
+  ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='8px DM Mono,monospace'; ctx.textAlign='center';
+  wkKeys.forEach(function(wk,i){ var parts=wk.split('-'); ctx.fillText(parts[2]+'/'+parts[1],toX(i),H-PAD.bottom+14); });
+
+  // Goal line
+  var gy=toYNet(NET_CAL_GOAL);
+  ctx.strokeStyle='rgba(26,158,80,0.6)'; ctx.lineWidth=1.2; ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(PAD.left,gy); ctx.lineTo(PAD.left+cW,gy); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='rgba(26,158,80,0.8)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='left';
+  ctx.fillText('meta '+NET_CAL_GOAL+' kcal',PAD.left+4,gy-4);
+
+  // Bars: net calories
+  series.forEach(function(s,i){
+    var x=toX(i); var y=toYNet(s.avgNet); var h=toYNet(0)-y;
+    var col=s.avgNet<=NET_CAL_GOAL?'rgba(26,158,80,0.7)':'rgba(224,48,80,0.7)';
+    ctx.fillStyle=col;
+    ctx.fillRect(x-barW,y,barW,h);
+    // Label
+    ctx.fillStyle=col; ctx.font='bold 9px DM Mono,monospace'; ctx.textAlign='center';
+    ctx.fillText(s.avgNet,x-barW/2,y-4);
+  });
+
+  // Protein line (on same scale, multiplied for visibility)
+  var proGoal=getProteinGoal();
+  ctx.strokeStyle='#7c5cbf'; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.beginPath();
+  series.forEach(function(s,i){
+    // Scale protein to cal axis: show as raw g value mapped proportionally
+    var x=toX(i)+barW/2;
+    var y=toYNet(s.avgProt/proGoal*NET_CAL_GOAL); // map protein% of goal to cal% of goal
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  series.forEach(function(s,i){
+    var x=toX(i)+barW/2;
+    var y=toYNet(s.avgProt/proGoal*NET_CAL_GOAL);
+    ctx.fillStyle='#7c5cbf'; ctx.beginPath(); ctx.arc(x,y,3,0,2*Math.PI); ctx.fill();
+    if(n<=12){ ctx.font='9px DM Mono,monospace'; ctx.textAlign='center'; ctx.fillText(s.avgProt+'g',x,y-7); }
+  });
+
+  // Legend
+  var legEl=document.getElementById('nutLegendGen');
+  if(legEl) legEl.innerHTML='<div class="chart-leg-item"><div class="chart-leg-dot" style="background:rgba(26,158,80,0.7)"></div>cal netas (avg)</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:rgba(224,48,80,0.7)"></div>cal netas &gt; meta</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:#7c5cbf"></div>proteína (avg g)</div>';
+
+  if(statsEl){
+    var last=series.slice(-4);
+    if(last.length){
+      var avgN=Math.round(last.reduce(function(a,s){return a+s.avgNet;},0)/last.length);
+      var avgP=Math.round(last.reduce(function(a,s){return a+s.avgProt;},0)/last.length);
+      statsEl.innerHTML='últimas '+last.length+' sem · cal netas avg '+avgN+' · proteína avg '+avgP+'g / '+proGoal+'g meta';
+    }
+  }
 }
 
 // ── END ESCALADA ──────────────────────────────────────────────────────
