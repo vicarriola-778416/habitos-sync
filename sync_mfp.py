@@ -23,6 +23,7 @@ from bs4 import BeautifulSoup
 
 # ── config ─────────────────────────────────────────────────────────────
 MFP_USER     = os.environ.get("MFP_USERNAME", "al778416")
+MFP_PASSWORD = os.environ.get("MFP_PASSWORD", "")
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SRK = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 USER_ID      = os.environ["SUPABASE_USER_ID"]
@@ -67,13 +68,52 @@ SESSION.headers.update({
     "Upgrade-Insecure-Requests": "1",
 })
 
-# Establish session cookies by visiting the main site first
-print("Establishing MFP session...")
+# Log into MFP to get authenticated session cookies
+print("Logging into MFP...")
 try:
-    r = SESSION.get("https://www.myfitnesspal.com/", timeout=15)
-    print(f"  Main page: {r.status_code}, cookies: {len(SESSION.cookies)}")
+    # Step 1: GET login page to get CSRF token + cookies
+    login_page = SESSION.get("https://www.myfitnesspal.com/account/login", timeout=15)
+    print(f"  Login page: {login_page.status_code}, cookies: {len(SESSION.cookies)}")
+
+    # Extract authenticity_token / CSRF
+    csrf = ""
+    from bs4 import BeautifulSoup as BS
+    soup_login = BS(login_page.text, "html.parser")
+    csrf_input = soup_login.find("input", {"name": "authenticity_token"})
+    if csrf_input:
+        csrf = csrf_input.get("value", "")
+    if not csrf:
+        # Try meta tag
+        meta = soup_login.find("meta", {"name": "csrf-token"})
+        if meta:
+            csrf = meta.get("content", "")
+    print(f"  CSRF token: {'found' if csrf else 'NOT FOUND'}")
+
+    # Step 2: POST credentials
+    login_data = {
+        "utf8": "✓",
+        "authenticity_token": csrf,
+        "user[email]": MFP_USER,
+        "user[password]": MFP_PASSWORD,
+        "commit": "Log In",
+    }
+    login_resp = SESSION.post(
+        "https://www.myfitnesspal.com/account/login",
+        data=login_data,
+        timeout=15,
+        allow_redirects=True,
+    )
+    print(f"  Login POST: {login_resp.status_code}, cookies: {len(SESSION.cookies)}")
+
+    # Check if we landed on the dashboard (successful) or back on login (failed)
+    if "login" in login_resp.url.lower() and login_resp.status_code == 200:
+        print("  WARNING: Login may have failed (still on login page)")
+    else:
+        print(f"  Logged in OK, redirected to: {login_resp.url[:60]}")
+
 except Exception as e:
-    print(f"  Session init failed: {e}")
+    print(f"  Login failed: {e}")
+    print("  Will try diary access anyway...")
 
 
 def fetch_diary(username, d):
