@@ -22,8 +22,9 @@ import requests
 from bs4 import BeautifulSoup
 
 # ── config ─────────────────────────────────────────────────────────────
-MFP_USER     = os.environ.get("MFP_USERNAME", "al778416")
+MFP_EMAIL    = os.environ.get("MFP_EMAIL", "")       # login email
 MFP_PASSWORD = os.environ.get("MFP_PASSWORD", "")
+MFP_USER     = os.environ.get("MFP_USERNAME", "al778416")  # diary URL username
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SRK = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 USER_ID      = os.environ["SUPABASE_USER_ID"]
@@ -68,52 +69,72 @@ SESSION.headers.update({
     "Upgrade-Insecure-Requests": "1",
 })
 
-# Log into MFP to get authenticated session cookies
+# Log into MFP using NextAuth API (modern MFP auth flow)
 print("Logging into MFP...")
+logged_in = False
 try:
-    # Step 1: GET login page to get CSRF token + cookies
-    login_page = SESSION.get("https://www.myfitnesspal.com/account/login", timeout=15)
-    print(f"  Login page: {login_page.status_code}, cookies: {len(SESSION.cookies)}")
+    # Method 1: NextAuth CSRF + credentials callback
+    csrf_resp = SESSION.get("https://www.myfitnesspal.com/api/auth/csrf", timeout=15)
+    if csrf_resp.status_code == 200:
+        csrf_data = csrf_resp.json()
+        csrf_token = csrf_data.get("csrfToken", "")
+        print(f"  NextAuth CSRF: {'found' if csrf_token else 'not found'}")
 
-    # Extract authenticity_token / CSRF
-    csrf = ""
-    from bs4 import BeautifulSoup as BS
-    soup_login = BS(login_page.text, "html.parser")
-    csrf_input = soup_login.find("input", {"name": "authenticity_token"})
-    if csrf_input:
-        csrf = csrf_input.get("value", "")
-    if not csrf:
-        # Try meta tag
-        meta = soup_login.find("meta", {"name": "csrf-token"})
-        if meta:
-            csrf = meta.get("content", "")
-    print(f"  CSRF token: {'found' if csrf else 'NOT FOUND'}")
+        if csrf_token and MFP_EMAIL and MFP_PASSWORD:
+            login_resp = SESSION.post(
+                "https://www.myfitnesspal.com/api/auth/callback/credentials",
+                data={
+                    "csrfToken": csrf_token,
+                    "email": MFP_EMAIL,
+                    "password": MFP_PASSWORD,
+                    "redirect": "false",
+                    "json": "true",
+                },
+                timeout=15,
+                allow_redirects=True,
+            )
+            print(f"  Login POST: {login_resp.status_code}, cookies: {len(SESSION.cookies)}")
+            if login_resp.status_code == 200:
+                logged_in = True
+                print("  NextAuth login OK")
+            else:
+                print(f"  Login response: {login_resp.text[:200]}")
 
-    # Step 2: POST credentials
-    login_data = {
-        "utf8": "✓",
-        "authenticity_token": csrf,
-        "user[email]": MFP_USER,
-        "user[password]": MFP_PASSWORD,
-        "commit": "Log In",
-    }
-    login_resp = SESSION.post(
-        "https://www.myfitnesspal.com/account/login",
-        data=login_data,
-        timeout=15,
-        allow_redirects=True,
-    )
-    print(f"  Login POST: {login_resp.status_code}, cookies: {len(SESSION.cookies)}")
+    # Method 2: Traditional form login as fallback
+    if not logged_in and MFP_EMAIL and MFP_PASSWORD:
+        print("  Trying traditional login...")
+        login_page = SESSION.get("https://www.myfitnesspal.com/account/login", timeout=15)
+        from bs4 import BeautifulSoup as BS
+        soup_login = BS(login_page.text, "html.parser")
+        csrf_input = soup_login.find("input", {"name": "authenticity_token"})
+        csrf = csrf_input.get("value", "") if csrf_input else ""
+        if not csrf:
+            meta = soup_login.find("meta", {"name": "csrf-token"})
+            csrf = meta.get("content", "") if meta else ""
 
-    # Check if we landed on the dashboard (successful) or back on login (failed)
-    if "login" in login_resp.url.lower() and login_resp.status_code == 200:
-        print("  WARNING: Login may have failed (still on login page)")
-    else:
-        print(f"  Logged in OK, redirected to: {login_resp.url[:60]}")
+        login_resp = SESSION.post(
+            "https://www.myfitnesspal.com/account/login",
+            data={
+                "authenticity_token": csrf,
+                "user[email]": MFP_EMAIL,
+                "user[password]": MFP_PASSWORD,
+                "commit": "Log In",
+            },
+            timeout=15,
+            allow_redirects=True,
+        )
+        if "login" not in login_resp.url.lower():
+            logged_in = True
+            print(f"  Traditional login OK → {login_resp.url[:50]}")
+        else:
+            print("  Traditional login also failed")
 
 except Exception as e:
-    print(f"  Login failed: {e}")
-    print("  Will try diary access anyway...")
+    print(f"  Login error: {e}")
+
+if not logged_in:
+    print("  WARNING: Not logged in. Diary access may fail.")
+print(f"  Total cookies: {len(SESSION.cookies)}")
 
 
 def fetch_diary(username, d):
