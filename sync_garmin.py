@@ -51,22 +51,36 @@ for i in range(DAYS):
             continue
 
         score = round(score)
-        print(f"  {ds}: score={score}")
-        rows.append({
-            "user_id": USER_ID,
-            "local_date": ds,
-            "metric": "sleep_score",
-            "value": score,
-            "source": "garmin",
-            "raw": json.dumps({
-                "score": score,
-                "sleepTimeSeconds": dto.get("sleepTimeSeconds", 0),
-                "deepSleepSeconds": dto.get("deepSleepSeconds", 0),
-                "lightSleepSeconds": dto.get("lightSleepSeconds", 0),
-                "remSleepSeconds": dto.get("remSleepSeconds", 0),
-                "awakeSleepSeconds": dto.get("awakeSleepSeconds", 0),
-            }),
+        total_sec = dto.get("sleepTimeSeconds", 0)
+        deep_sec = dto.get("deepSleepSeconds", 0)
+        light_sec = dto.get("lightSleepSeconds", 0)
+        rem_sec = dto.get("remSleepSeconds", 0)
+        awake_sec = dto.get("awakeSleepSeconds", 0)
+        total_min = round(total_sec / 60) if total_sec else 0
+        hours = round(total_sec / 3600, 1) if total_sec else 0
+
+        print(f"  {ds}: score={score}, {hours}h (deep {round(deep_sec/60)}m, rem {round(rem_sec/60)}m)")
+
+        raw = json.dumps({
+            "score": score,
+            "sleepTimeSeconds": total_sec,
+            "deepSleepSeconds": deep_sec,
+            "lightSleepSeconds": light_sec,
+            "remSleepSeconds": rem_sec,
+            "awakeSleepSeconds": awake_sec,
         })
+
+        rows.append({"user_id": USER_ID, "local_date": ds, "metric": "sleep_score", "value": score, "source": "garmin", "raw": raw})
+        if total_min > 0:
+            rows.append({"user_id": USER_ID, "local_date": ds, "metric": "sleep_minutes", "value": total_min, "source": "garmin"})
+        if deep_sec > 0:
+            rows.append({"user_id": USER_ID, "local_date": ds, "metric": "sleep_deep_minutes", "value": round(deep_sec / 60), "source": "garmin"})
+        if light_sec > 0:
+            rows.append({"user_id": USER_ID, "local_date": ds, "metric": "sleep_light_minutes", "value": round(light_sec / 60), "source": "garmin"})
+        if rem_sec > 0:
+            rows.append({"user_id": USER_ID, "local_date": ds, "metric": "sleep_rem_minutes", "value": round(rem_sec / 60), "source": "garmin"})
+        if awake_sec > 0:
+            rows.append({"user_id": USER_ID, "local_date": ds, "metric": "sleep_awake_minutes", "value": round(awake_sec / 60), "source": "garmin"})
     except Exception as e:
         print(f"  {ds}: error — {e}")
 
