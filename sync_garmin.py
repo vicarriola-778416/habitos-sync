@@ -1,6 +1,6 @@
 """
 Garmin Connect → Supabase: Sleep Score sync.
-Uses the `garth` library for reliable Garmin auth.
+Uses the `garminconnect` library (actively maintained).
 Designed to run as a GitHub Action (cron daily at 8:30am).
 
 Required env vars (set as GitHub Secrets):
@@ -10,7 +10,7 @@ Required env vars (set as GitHub Secrets):
 """
 import os, json, sys
 from datetime import date, timedelta
-import garth
+from garminconnect import Garmin
 import requests
 
 # ── config ─────────────────────────────────────────────────────────────
@@ -23,8 +23,10 @@ DAYS            = int(os.environ.get("SYNC_DAYS", "14"))
 
 # ── Garmin auth ────────────────────────────────────────────────────────
 print("Logging into Garmin Connect...")
-garth.login(GARMIN_EMAIL, GARMIN_PASSWORD)
-print(f"Authenticated as: {garth.client.username}")
+client = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
+client.login()
+name = client.get_full_name() or client.display_name or "unknown"
+print(f"Authenticated as: {name}")
 
 # ── Fetch sleep data ───────────────────────────────────────────────────
 rows = []
@@ -33,22 +35,19 @@ for i in range(DAYS):
     d = today - timedelta(days=i)
     ds = d.isoformat()
     try:
-        sleep = garth.connectapi(
-            f"/wellness-service/wellness/dailySleepData/{garth.client.username}",
-            params={"date": ds, "nonSleepBufferMinutes": 60},
-        )
+        sleep = client.get_sleep_data(ds)
         if not sleep:
             print(f"  {ds}: no data")
             continue
 
         dto = sleep.get("dailySleepDTO", sleep)
         scores = dto.get("sleepScores", {})
-        score = (
-            scores.get("overall", {}).get("value")
-            or scores.get("totalDuration", {}).get("value")
-        )
+        score = scores.get("overall", {}).get("value")
         if score is None:
-            print(f"  {ds}: data but no score")
+            # Try alternate location
+            score = scores.get("qualityScore", {}).get("value")
+        if score is None:
+            print(f"  {ds}: data but no score (keys: {list(scores.keys())})")
             continue
 
         score = round(score)
