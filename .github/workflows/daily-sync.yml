@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install myfitnesspal requests
+        run: pip install requests beautifulsoup4
       - name: Sync MFP nutrition
         env:
           MFP_USERNAME: ${{ secrets.MFP_USERNAME }}
