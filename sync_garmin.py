@@ -19,7 +19,7 @@ GARMIN_PASSWORD = os.environ["GARMIN_PASSWORD"]
 SUPABASE_URL    = os.environ["SUPABASE_URL"]
 SUPABASE_SRK    = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 USER_ID         = os.environ["SUPABASE_USER_ID"]
-DAYS            = int(os.environ.get("SYNC_DAYS", "52"))
+DAYS            = int(os.environ.get("SYNC_DAYS", "14"))
 
 # ── Garmin auth ────────────────────────────────────────────────────────
 print("Logging into Garmin Connect...")
