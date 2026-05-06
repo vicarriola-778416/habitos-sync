@@ -97,7 +97,6 @@ def fetch_diary(username, d):
             continue
 
     if not resp or resp.status_code != 200:
-    if not resp or resp.status_code != 200:
         return None
 
     soup = BeautifulSoup(resp.text, "html.parser")
