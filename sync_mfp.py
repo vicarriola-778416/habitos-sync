@@ -53,18 +53,51 @@ def parse_number(text):
     return 0
 
 
+SESSION = requests.Session()
+SESSION.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "es-AR,es;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "DNT": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+})
+
+# Establish session cookies by visiting the main site first
+print("Establishing MFP session...")
+try:
+    r = SESSION.get("https://www.myfitnesspal.com/", timeout=15)
+    print(f"  Main page: {r.status_code}, cookies: {len(SESSION.cookies)}")
+except Exception as e:
+    print(f"  Session init failed: {e}")
+
+
 def fetch_diary(username, d):
     """Fetch and parse one day's diary page."""
     ds = d.isoformat()
-    url = f"{BASE_URL}/{username}?date={ds}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 13) Chrome/120.0.0.0 Mobile Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9,es;q=0.8",
-    }
+    # Try both English and Spanish URLs
+    urls_to_try = [
+        f"https://www.myfitnesspal.com/food/diary/{username}?date={ds}",
+        f"https://www.myfitnesspal.com/es/food/diary/{username}?date={ds}",
+    ]
 
-    resp = requests.get(url, headers=headers, timeout=15)
-    if resp.status_code != 200:
-        print(f"  {ds}: HTTP {resp.status_code}")
+    resp = None
+    for url in urls_to_try:
+        try:
+            resp = SESSION.get(url, timeout=15)
+            if resp.status_code == 200:
+                break
+            print(f"  {ds}: {resp.status_code} at {url.split('.com')[1][:40]}")
+        except Exception as e:
+            print(f"  {ds}: error {e}")
+            continue
+
+    if not resp or resp.status_code != 200:
+    if not resp or resp.status_code != 200:
         return None
 
     soup = BeautifulSoup(resp.text, "html.parser")
