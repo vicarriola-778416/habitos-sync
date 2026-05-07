@@ -667,21 +667,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
       </div>
       <div class="seg-right" style="overflow-y:auto">
         <div id="escSegDetail"></div>
-        <div class="chart-wrap" style="margin-top:14px">
-          <div class="chart-title">
-            <span>rutina strength — kg max por semana</span>
-            <div class="chart-legend" id="escStrLegend"></div>
-          </div>
-          <canvas id="escStrChart" height="200"></canvas>
-        </div>
-        <div class="chart-wrap" style="margin-top:14px">
-          <div class="chart-title">
-            <span>system board — problemas por semana</span>
-            <div class="chart-legend" id="escSBLegend"></div>
-          </div>
-          <canvas id="escSBChart" height="200"></canvas>
-        </div>
-        <!-- Peak Force 25mm -->
+        <!-- Peak Force 25mm (arriba) -->
         <div class="chart-wrap" style="margin-top:14px">
           <div class="chart-title">
             <span>peak force 25mm (kg)</span>
@@ -696,8 +682,20 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
           </div>
           <div id="pfLog" style="margin-top:8px;max-height:100px;overflow-y:auto;font-size:.44rem;color:var(--dim)"></div>
         </div>
-
-        <!-- peso + sueño movidos al tab "seguimiento general" -->
+        <div class="chart-wrap" style="margin-top:14px">
+          <div class="chart-title">
+            <span>rutina strength — kg max por semana</span>
+            <div class="chart-legend" id="escStrLegend"></div>
+          </div>
+          <canvas id="escStrChart" height="200"></canvas>
+        </div>
+        <div class="chart-wrap" style="margin-top:14px">
+          <div class="chart-title">
+            <span>system board — problemas por semana</span>
+            <div class="chart-legend" id="escSBLegend"></div>
+          </div>
+          <canvas id="escSBChart" height="200"></canvas>
+        </div>
       </div>
     </div>
   </div>
@@ -4373,6 +4371,26 @@ function deleteEscRegSession(mac,week,idx){
 }
 
 // ── ④ SEGUIMIENTO ─────────────────────────────────────────────────────
+function getEscUnifiedWeeks(){
+  // Collect all calendar weeks from escLog (dates) + peakForce (dates)
+  var allWeeks={};
+  // From escLog: iterate all macros and weeks
+  ESC_MACROS_ORDER.forEach(function(mid){
+    var mac=ESC_MACROS[mid]; if(!mac) return;
+    for(var w=1;w<=mac.totalWeeks;w++){
+      var logs=escLog[mid]&&escLog[mid][w]?escLog[mid][w]:[];
+      logs.forEach(function(l){
+        if(l.date) allWeeks[weightWeekKey(l.date)]=1;
+      });
+    }
+  });
+  // From peakForce
+  if(typeof peakForce!=='undefined') peakForce.forEach(function(p){
+    if(p.date) allWeeks[weightWeekKey(p.date)]=1;
+  });
+  return Object.keys(allWeeks).sort();
+}
+
 function renderEscSeg(){
   var html='';
   ESC_MACROS_ORDER.forEach(function(mid){
@@ -4380,15 +4398,13 @@ function renderEscSeg(){
     html+='<button class="macro-btn'+(mid===escSegSelectedMacro?' active':'')+'" onclick="selectEscSegMacro(\''+mid+'\')" style="'+(mid===escSegSelectedMacro?'background:'+c+';border-color:'+c:'')+'">'+(ESC_MACROS[mid].name)+'</button>';
   });
   document.getElementById('escSegMacroBtns').innerHTML=html;
+  var escWeeks=getEscUnifiedWeeks();
   renderEscSegWeekList();
   renderEscSegDetail();
-  renderEscStrChart();
-  renderEscSBChart();
-  renderPfChart();
+  renderPfChart(escWeeks);
   renderPfLog();
-  renderWeightChart();
-  renderWeightLog();
-  renderSleepChart();
+  renderEscStrChart(escWeeks);
+  renderEscSBChart(escWeeks);
 }
 function selectEscSegMacro(mid){ escSegSelectedMacro=mid; escSegSelectedWeek=null; renderEscSeg(); }
 function renderEscSegWeekList(){
@@ -4506,7 +4522,7 @@ function deleteEscProject(idx){
   escProjects.splice(idx,1);
   markDirty(); renderEscProyectos();
 }
-function renderEscStrChart(){
+function renderEscStrChart(unifiedWeeks){
   var canvas=document.getElementById('escStrChart');
   if(!canvas) return;
   var ctx=canvas.getContext('2d');
@@ -4520,31 +4536,36 @@ function renderEscStrChart(){
   var exColors=['#2d6ee8','#e03050','#d4670a','#1a9e50','#7c5cbf'];
   var exShort=['BW Rep','No Hang','Max Hang','W.Pull','Pinch'];
 
-  var mac=ESC_MACROS[escSegSelectedMacro];
-  var weeks=mac.totalWeeks;
+  // Collect max kg per exercise per calendar week (across all macros)
+  var weekMap={}; // weekKey → { exerciseName → maxKg }
+  ESC_MACROS_ORDER.forEach(function(mid){
+    var mac=ESC_MACROS[mid]; if(!mac) return;
+    for(var w=1;w<=mac.totalWeeks;w++){
+      var logs=escLog[mid]&&escLog[mid][w]?escLog[mid][w]:[];
+      logs.forEach(function(l){
+        if(l.type==='Strength'&&l.subtype==='Rutina Strength'&&l.exercises&&l.date){
+          var wk=weightWeekKey(l.date);
+          if(!weekMap[wk]) weekMap[wk]={};
+          exKeys.forEach(function(k){
+            var ex=l.exercises[k]; if(!ex) return;
+            var kg=typeof ex==='object'?ex.kg:ex;
+            if(kg>0&&(!weekMap[wk][k]||kg>weekMap[wk][k])) weekMap[wk][k]=kg;
+          });
+        }
+      });
+    }
+  });
 
-  // collect max kg per exercise per week
+  var wkKeys=unifiedWeeks||Object.keys(weekMap).sort();
+  // Build series per exercise: array aligned with wkKeys
   var seriesData={};
   exKeys.forEach(function(k){ seriesData[k]=[]; });
-
-  for(var w=1;w<=weeks;w++){
-    var logs=escLog[escSegSelectedMacro][w]||[];
-    var weekMax={};
-    exKeys.forEach(function(k){ weekMax[k]=null; });
-    logs.forEach(function(l){
-      if(l.type==='Strength'&&l.subtype==='Rutina Strength'&&l.exercises){
-        exKeys.forEach(function(k){
-          var ex=l.exercises[k];
-          if(!ex) return;
-          var kg=typeof ex==='object'?ex.kg:ex;
-          if(kg>0&&(weekMax[k]===null||kg>weekMax[k])) weekMax[k]=kg;
-        });
-      }
-    });
+  wkKeys.forEach(function(wk,i){
     exKeys.forEach(function(k){
-      if(weekMax[k]!==null) seriesData[k].push({week:w,kg:weekMax[k]});
+      if(weekMap[wk]&&weekMap[wk][k]) seriesData[k].push({idx:i,kg:weekMap[wk][k]});
     });
-  }
+  });
+  var weeks=wkKeys.length;
 
   var hasData=exKeys.some(function(k){ return seriesData[k].length>0; });
   if(!hasData){
@@ -4569,13 +4590,9 @@ function renderEscStrChart(){
     ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='right';
     ctx.fillText(Math.round(g/5*maxKg)+'kg', PAD.left-4, y+3);
   }
-  // x axis labels
-  ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='center';
-  var step=Math.max(1,Math.floor(weeks/8));
-  for(var wx=1;wx<=weeks;wx+=step){
-    var x=PAD.left+(wx-1)/(Math.max(weeks-1,1))*cW;
-    ctx.fillText(wx, x, H-PAD.bottom+14);
-  }
+  // x axis labels (calendar weeks)
+  ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='8px DM Mono,monospace'; ctx.textAlign='center';
+  wkKeys.forEach(function(wk,i){ var step=Math.max(1,Math.floor(weeks/10)); if(weeks>1&&i%step!==0&&i!==weeks-1) return; var parts=wk.split('-'); ctx.fillText(parts[2]+'/'+parts[1], PAD.left+i/(Math.max(weeks-1,1))*cW, H-PAD.bottom+14); });
 
   // draw series
   exKeys.forEach(function(k,ki){
@@ -4585,13 +4602,13 @@ function renderEscStrChart(){
     ctx.strokeStyle=c; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round';
     ctx.beginPath();
     pts.forEach(function(p,i){
-      var x=PAD.left+(p.week-1)/(Math.max(weeks-1,1))*cW;
+      var x=PAD.left+p.idx/(Math.max(weeks-1,1))*cW;
       var y=PAD.top+cH-(p.kg/maxKg)*cH;
       if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     });
     ctx.stroke();
     pts.forEach(function(p){
-      var x=PAD.left+(p.week-1)/(Math.max(weeks-1,1))*cW;
+      var x=PAD.left+p.idx/(Math.max(weeks-1,1))*cW;
       var y=PAD.top+cH-(p.kg/maxKg)*cH;
       ctx.fillStyle=c; ctx.beginPath(); ctx.arc(x,y,3,0,2*Math.PI); ctx.fill();
     });
@@ -4606,7 +4623,7 @@ function renderEscStrChart(){
   document.getElementById('escStrLegend').innerHTML=legHtml;
 }
 
-function renderEscSBChart(){
+function renderEscSBChart(unifiedWeeks){
   var canvas=document.getElementById('escSBChart');
   if(!canvas) return;
   var ctx=canvas.getContext('2d');
@@ -4619,30 +4636,38 @@ function renderEscSBChart(){
   var boards=['Tension','Kilter'];
   var boardColors=['#e03050','#2d6ee8'];
   var grades=['V3','V4','V5','V6','V7'];
-  var mac=ESC_MACROS[escSegSelectedMacro];
-  var weeks=mac.totalWeeks;
-
-  // collect max grade per board per week (V3=3, V4=4...V7=7)
   var gradeNums={'V3':3,'V4':4,'V5':5,'V6':6,'V7':7};
+
+  // Collect max grade per board per calendar week (across all macros)
+  var weekMap={};
+  ESC_MACROS_ORDER.forEach(function(mid){
+    var mac=ESC_MACROS[mid]; if(!mac) return;
+    for(var w=1;w<=mac.totalWeeks;w++){
+      var logs=escLog[mid]&&escLog[mid][w]?escLog[mid][w]:[];
+      logs.forEach(function(l){
+        if(l.type==='Strength'&&l.subtype==='System Board'&&l.boardData&&l.date){
+          var wk=weightWeekKey(l.date);
+          if(!weekMap[wk]) weekMap[wk]={Tension:0,Kilter:0};
+          grades.forEach(function(v){
+            var t=(l.boardData.tension&&l.boardData.tension[v])||0;
+            var k=(l.boardData.kilter&&l.boardData.kilter[v])||0;
+            if(t>0&&gradeNums[v]>weekMap[wk].Tension) weekMap[wk].Tension=gradeNums[v];
+            if(k>0&&gradeNums[v]>weekMap[wk].Kilter)  weekMap[wk].Kilter=gradeNums[v];
+          });
+        }
+      });
+    }
+  });
+
+  var wkKeys=unifiedWeeks||Object.keys(weekMap).sort();
+  var weeks=wkKeys.length;
   var seriesData={};
   boards.forEach(function(b){ seriesData[b]=[]; });
-
-  for(var w=1;w<=weeks;w++){
-    var logs=escLog[escSegSelectedMacro][w]||[];
-    var weekMax={Tension:0,Kilter:0};
-    logs.forEach(function(l){
-      if(l.type==='Strength'&&l.subtype==='System Board'&&l.boardData){
-        grades.forEach(function(v){
-          var t=l.boardData.tension[v]||0, k=l.boardData.kilter[v]||0;
-          if(t>0&&gradeNums[v]>weekMax.Tension) weekMax.Tension=gradeNums[v];
-          if(k>0&&gradeNums[v]>weekMax.Kilter)  weekMax.Kilter=gradeNums[v];
-        });
-      }
-    });
+  wkKeys.forEach(function(wk,i){
     boards.forEach(function(b){
-      if(weekMax[b]>0) seriesData[b].push({week:w,n:weekMax[b]});
+      if(weekMap[wk]&&weekMap[wk][b]>0) seriesData[b].push({idx:i,n:weekMap[wk][b]});
     });
-  }
+  });
 
   var hasData=boards.some(function(b){ return seriesData[b].length>0; });
   if(!hasData){
@@ -4665,13 +4690,9 @@ function renderEscSBChart(){
     var gradeLabel=Math.round(g/5*maxN);
     ctx.fillText(gradeLabel>0?'V'+gradeLabel:'', PAD.left-4, y+3);
   }
-  // x axis
-  ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='center';
-  var step=Math.max(1,Math.floor(weeks/8));
-  for(var wx=1;wx<=weeks;wx+=step){
-    var x=PAD.left+(wx-1)/(Math.max(weeks-1,1))*cW;
-    ctx.fillText(wx, x, H-PAD.bottom+14);
-  }
+  // x axis (calendar weeks)
+  ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='8px DM Mono,monospace'; ctx.textAlign='center';
+  wkKeys.forEach(function(wk,i){ var step=Math.max(1,Math.floor(weeks/10)); if(weeks>1&&i%step!==0&&i!==weeks-1) return; var parts=wk.split('-'); ctx.fillText(parts[2]+'/'+parts[1], PAD.left+i/(Math.max(weeks-1,1))*cW, H-PAD.bottom+14); });
 
   // draw lines
   boards.forEach(function(b,bi){
@@ -4681,13 +4702,13 @@ function renderEscSBChart(){
     ctx.strokeStyle=c; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round';
     ctx.beginPath();
     pts.forEach(function(p,i){
-      var x=PAD.left+(p.week-1)/(Math.max(weeks-1,1))*cW;
+      var x=PAD.left+p.idx/(Math.max(weeks-1,1))*cW;
       var y=PAD.top+cH-(p.n/maxN)*cH;
       if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     });
     ctx.stroke();
     pts.forEach(function(p){
-      var x=PAD.left+(p.week-1)/(Math.max(weeks-1,1))*cW;
+      var x=PAD.left+p.idx/(Math.max(weeks-1,1))*cW;
       var y=PAD.top+cH-(p.n/maxN)*cH;
       ctx.fillStyle=c; ctx.beginPath(); ctx.arc(x,y,3,0,2*Math.PI); ctx.fill();
     });
@@ -4738,7 +4759,7 @@ function pfStats(arr){
   return {min:s[0], med:med, max:s[n-1]};
 }
 
-function renderPfChart(){
+function renderPfChart(unifiedWeeks){
   var canvas=document.getElementById('pfChart');
   if(!canvas) return;
   var ctx=canvas.getContext('2d');
@@ -4763,9 +4784,9 @@ function renderPfChart(){
     if(p.left!=null)  weekMap[wk].lefts.push(p.left);
     if(p.right!=null) weekMap[wk].rights.push(p.right);
   });
-  var wkKeys=Object.keys(weekMap).sort();
-  var leftSeries=wkKeys.map(function(wk){return pfStats(weekMap[wk].lefts);});
-  var rightSeries=wkKeys.map(function(wk){return pfStats(weekMap[wk].rights);});
+  var wkKeys=unifiedWeeks||Object.keys(weekMap).sort();
+  var leftSeries=wkKeys.map(function(wk){ return weekMap[wk]?pfStats(weekMap[wk].lefts):null; });
+  var rightSeries=wkKeys.map(function(wk){ return weekMap[wk]?pfStats(weekMap[wk].rights):null; });
 
   // y range
   var allVals=[];
@@ -5232,39 +5253,109 @@ function renderWeightChartOn(canvasId, legendId, unifiedWeeks){
 }
 
 // Generic sleep chart renderer
+// Sleep chart: 2 lines (% days score>=80, % days >=7.5h) + 2 bars (avg score, avg hours)
 function renderSleepChartOn(canvasId, legendId, statsId, unifiedWeeks){
   var canvas=document.getElementById(canvasId); if(!canvas) return;
   var ctx=canvas.getContext('2d');
-  var W=canvas.parentElement.offsetWidth-28; var H=220;
+  var W=canvas.parentElement.offsetWidth-28; var H=280;
   canvas.width=W; canvas.style.width=W+'px'; canvas.height=H; canvas.style.height=H+'px';
   ctx.clearRect(0,0,W,H);
   var byDate={};
-  if(typeof tData!=='undefined'){ Object.keys(tData).forEach(function(d){ var v=tData[d]&&tData[d].sleepScore; if(typeof v==='number') byDate[d]=v; }); }
+  if(typeof tData!=='undefined'){
+    Object.keys(tData).forEach(function(d){
+      var dd=tData[d]; if(!dd) return;
+      var sc=dd.sleepScore, hrs=dd.sueno;
+      if(typeof sc==='number'||typeof hrs==='number')
+        byDate[d]={score:typeof sc==='number'?sc:null, hrs:typeof hrs==='number'?hrs:null};
+    });
+  }
   var dates=Object.keys(byDate); var statsEl=document.getElementById(statsId);
-  if(!dates.length){ ctx.fillStyle='rgba(194,200,216,0.5)'; ctx.font='11px DM Mono,monospace'; ctx.textAlign='center'; ctx.fillText('ingresá tu sleep score de Garmin',W/2,H/2); if(document.getElementById(legendId)) document.getElementById(legendId).innerHTML=''; if(statsEl) statsEl.innerHTML=''; return; }
-  var weekMap={}; dates.forEach(function(d){ var wk=weightWeekKey(d); if(!weekMap[wk]) weekMap[wk]=[]; weekMap[wk].push(byDate[d]); });
+  if(!dates.length){
+    ctx.fillStyle='rgba(194,200,216,0.5)'; ctx.font='11px DM Mono,monospace'; ctx.textAlign='center';
+    ctx.fillText('datos de sueno apareceran aca',W/2,H/2);
+    if(document.getElementById(legendId)) document.getElementById(legendId).innerHTML='';
+    if(statsEl) statsEl.innerHTML=''; return;
+  }
+  var weekMap={};
+  dates.forEach(function(d){ var wk=weightWeekKey(d); if(!weekMap[wk]) weekMap[wk]=[]; weekMap[wk].push(byDate[d]); });
   var wkKeys=unifiedWeeks||Object.keys(weekMap).sort();
-  function stats(arr){ if(!arr||!arr.length) return null; var s=arr.slice().sort(function(a,b){return a-b;}); var sum=0; for(var i=0;i<s.length;i++) sum+=s[i]; return {min:s[0],max:s[s.length-1],avg:Math.round(sum/s.length),n:s.length}; }
-  var series=wkKeys.map(function(wk){ return stats(weekMap[wk]); });
-  var SLEEP_GOAL=80; var allVals=[]; series.forEach(function(s){ if(s) allVals.push(s.min,s.max); }); allVals.push(SLEEP_GOAL);
-  if(allVals.length<2) allVals=[40,100];
-  var minY=Math.max(0,Math.floor(Math.min.apply(null,allVals)/5)*5-5); var maxY=Math.min(100,Math.ceil(Math.max.apply(null,allVals)/5)*5+5); if(maxY-minY<20) maxY=Math.min(100,minY+20); var range=maxY-minY;
-  var PAD={top:16,right:16,bottom:36,left:44}; var cW=W-PAD.left-PAD.right; var cH=H-PAD.top-PAD.bottom; var n=wkKeys.length;
+  var n=wkKeys.length;
+  var series=wkKeys.map(function(wk){
+    var arr=weekMap[wk]; if(!arr||!arr.length) return null;
+    var scDays=arr.filter(function(a){return a.score!=null;});
+    var hrDays=arr.filter(function(a){return a.hrs!=null;});
+    var pctScore=scDays.length?Math.round(scDays.filter(function(a){return a.score>=80;}).length/scDays.length*100):null;
+    var pctHrs=hrDays.length?Math.round(hrDays.filter(function(a){return a.hrs>=7.5;}).length/hrDays.length*100):null;
+    var avgScore=scDays.length?Math.round(scDays.reduce(function(s,a){return s+a.score;},0)/scDays.length):null;
+    var avgHrs=hrDays.length?Math.round(hrDays.reduce(function(s,a){return s+a.hrs;},0)/hrDays.length*10)/10:null;
+    return {pctScore:pctScore,pctHrs:pctHrs,avgScore:avgScore,avgHrs:avgHrs,n:arr.length};
+  });
+  var PAD={top:16,right:50,bottom:36,left:44};
+  var cW=W-PAD.left-PAD.right; var cH=H-PAD.top-PAD.bottom;
   function toX(i){ return PAD.left+(n<2?cW/2:i/(n-1)*cW); }
-  function toY(v){ return PAD.top+cH-((v-minY)/range)*cH; }
+  function toYPct(v){ return PAD.top+cH-((v||0)/100)*cH; }
   ctx.strokeStyle='rgba(194,200,216,0.35)'; ctx.lineWidth=0.5;
-  for(var g=0;g<=4;g++){ var yg=PAD.top+cH-(g/4)*cH; ctx.beginPath(); ctx.moveTo(PAD.left,yg); ctx.lineTo(PAD.left+cW,yg); ctx.stroke(); ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='right'; ctx.fillText(Math.round(minY+g/4*range),PAD.left-4,yg+3); }
+  for(var g=0;g<=4;g++){
+    var yg=PAD.top+cH-(g/4)*cH;
+    ctx.beginPath(); ctx.moveTo(PAD.left,yg); ctx.lineTo(PAD.left+cW,yg); ctx.stroke();
+    ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='right';
+    ctx.fillText((g*25)+'%',PAD.left-4,yg+3);
+  }
   ctx.fillStyle='rgba(140,151,176,0.9)'; ctx.font='8px DM Mono,monospace'; ctx.textAlign='center';
-  wkKeys.forEach(function(wk,i){ var step=Math.max(1,Math.floor(n/8)); if(n>1&&i%step!==0&&i!==n-1) return; var parts=wk.split('-'); ctx.fillText(parts[2]+'/'+parts[1],toX(i),H-PAD.bottom+14); });
-  var gy=toY(SLEEP_GOAL); ctx.strokeStyle='rgba(26,158,80,0.6)'; ctx.lineWidth=1.2; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(PAD.left,gy); ctx.lineTo(PAD.left+cW,gy); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle='rgba(26,158,80,0.8)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='left'; ctx.fillText('meta 80',PAD.left+4,gy-4);
-  function drawLine(colour,accessor,width){ ctx.strokeStyle=colour; ctx.lineWidth=width||2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.beginPath(); var started=false; series.forEach(function(s,i){ if(!s) return; var y=toY(accessor(s)); if(!started){ctx.moveTo(toX(i),y);started=true;} else ctx.lineTo(toX(i),y); }); ctx.stroke(); }
-  drawLine('rgba(146,84,222,0.75)',function(s){return s.max;},1.6);
-  drawLine('rgba(232,152,45,0.85)',function(s){return s.min;},1.6);
-  drawLine('#2d6ee8',function(s){return s.avg;},2.6);
-  series.forEach(function(s,i){ if(!s) return; ctx.fillStyle='#2d6ee8'; ctx.beginPath(); ctx.arc(toX(i),toY(s.avg),3,0,2*Math.PI); ctx.fill(); if(n<=12){ ctx.fillStyle='rgba(45,110,232,0.85)'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='center'; ctx.fillText(String(s.avg),toX(i),toY(s.avg)-7); } });
+  wkKeys.forEach(function(wk,i){ var step=Math.max(1,Math.floor(n/10)); if(n>1&&i%step!==0&&i!==n-1) return; var parts=wk.split('-'); ctx.fillText(parts[2]+'/'+parts[1],toX(i),H-PAD.bottom+14); });
+  ctx.strokeStyle='rgba(26,158,80,0.4)'; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(PAD.left,toYPct(100)); ctx.lineTo(PAD.left+cW,toYPct(100)); ctx.stroke();
+  ctx.setLineDash([]);
+  var barW=Math.min(16,cW/n*0.25);
+  series.forEach(function(s,i){
+    if(!s) return; var x=toX(i);
+    if(s.avgScore!=null){
+      var yS=toYPct(s.avgScore); var hS=toYPct(0)-yS;
+      ctx.fillStyle='rgba(45,110,232,0.2)'; ctx.fillRect(x-barW-1,yS,barW,hS);
+      ctx.fillStyle='rgba(45,110,232,0.7)'; ctx.font='bold 8px DM Mono,monospace'; ctx.textAlign='center';
+      ctx.fillText(s.avgScore,x-barW/2-1,yS-3);
+    }
+    if(s.avgHrs!=null){
+      var hrPct=Math.min(100,s.avgHrs/10*100);
+      var yH=toYPct(hrPct); var hH=toYPct(0)-yH;
+      ctx.fillStyle='rgba(26,158,80,0.15)'; ctx.fillRect(x+1,yH,barW,hH);
+      ctx.fillStyle='rgba(26,158,80,0.7)'; ctx.font='bold 8px DM Mono,monospace'; ctx.textAlign='center';
+      ctx.fillText(s.avgHrs+'h',x+barW/2+1,yH-3);
+    }
+  });
+  function drawPctLine(colour,accessor,width){
+    ctx.strokeStyle=colour; ctx.lineWidth=width||2.5; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath(); var started=false;
+    series.forEach(function(s,i){
+      if(!s) return; var v=accessor(s); if(v==null) return;
+      var x=toX(i); var y=toYPct(v);
+      if(!started){ctx.moveTo(x,y);started=true;} else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    series.forEach(function(s,i){
+      if(!s) return; var v=accessor(s); if(v==null) return;
+      var x=toX(i); var y=toYPct(v);
+      ctx.fillStyle=colour; ctx.beginPath(); ctx.arc(x,y,3.5,0,2*Math.PI); ctx.fill();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(x,y,3.5,0,2*Math.PI); ctx.stroke();
+      if(n<=14){ ctx.fillStyle=colour; ctx.font='bold 9px DM Mono,monospace'; ctx.textAlign='center'; ctx.fillText(v+'%',x,y-9); }
+    });
+  }
+  drawPctLine('#2d6ee8',function(s){return s.pctScore;},2.5);
+  drawPctLine('#1a9e50',function(s){return s.pctHrs;},2.5);
   var legEl=document.getElementById(legendId);
-  if(legEl) legEl.innerHTML='<div class="chart-leg-item"><div class="chart-leg-dot" style="background:rgba(146,84,222,0.75)"></div>max</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:#2d6ee8"></div>promedio</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:rgba(232,152,45,0.85)"></div>min</div><div class="chart-leg-item"><div class="chart-leg-dot" style="background:#1a9e50"></div>meta</div>';
-  if(statsEl){ var recent=series.slice(-4); if(recent.length){ var rs=stats(recent.map(function(r){return r.avg;})); statsEl.innerHTML='últimas '+recent.length+' sem · promedio '+rs.avg+' · '+dates.length+' noches'; } }
+  if(legEl) legEl.innerHTML=
+    '<div class="chart-leg-item"><div class="chart-leg-dot" style="background:#2d6ee8"></div>% score >= 80</div>'
+   +'<div class="chart-leg-item"><div class="chart-leg-dot" style="background:#1a9e50"></div>% >= 7.5h</div>'
+   +'<div class="chart-leg-item"><div class="chart-leg-dot" style="background:rgba(45,110,232,0.25);border:1px solid rgba(45,110,232,0.5)"></div>avg score</div>'
+   +'<div class="chart-leg-item"><div class="chart-leg-dot" style="background:rgba(26,158,80,0.2);border:1px solid rgba(26,158,80,0.5)"></div>avg hrs</div>';
+  if(statsEl){
+    var recent=series.filter(function(s){return s;}).slice(-4);
+    if(recent.length){
+      var avgSc=Math.round(recent.reduce(function(a,s){return a+(s.avgScore||0);},0)/recent.length);
+      var avgHr=Math.round(recent.reduce(function(a,s){return a+(s.avgHrs||0);},0)/recent.length*10)/10;
+      statsEl.innerHTML='ultimas '+recent.length+' sem - avg score '+avgSc+' - avg '+avgHr+'h - '+dates.length+' noches';
+    }
+  }
 }
 
 // Weekly nutrition chart: 3 lines showing % compliance per week
