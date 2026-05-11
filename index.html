@@ -329,7 +329,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
 </div>
 
 <div class="topnav">
-  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-07 12:05 CLT</span></div>
+  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-07 12:15 CLT</span></div>
   <div class="nav-right">
     <div class="month-label" id="mLbl"></div>
     <button class="mnav-btn" onclick="chM(-1)">&#8592;</button>
@@ -3668,10 +3668,19 @@ function renderSegWeekList(){
     var logs=runLog[segSelectedMacro]&&runLog[segSelectedMacro][w]?runLog[segSelectedMacro][w]:[];
     var pct=0,color='var(--dim)';
     if(meso){
-      var req=meso.sessions.filter(function(s){return s.req;}).length;
+      // Check user overrides in runPlan[mac][week].sessions (e.g. "Long":"opcional")
+      var planSessions = (plan && plan.sessions) ? plan.sessions : {};
+      function isReq(s){
+        // User override wins: "forzoso" → true, "opcional" → false
+        if(planSessions[s.t]==='forzoso') return true;
+        if(planSessions[s.t]==='opcional') return false;
+        return s.req; // fallback to meso default
+      }
+      var reqSessions=meso.sessions.filter(isReq);
+      var req=reqSessions.length;
       var done=0;
       if(req>0){
-        meso.sessions.filter(function(s){return s.req;}).forEach(function(s){
+        reqSessions.forEach(function(s){
           if(logs.some(function(l){return l.type===s.t;})) done++;
         });
         pct=Math.round(done/req*100);
@@ -3756,10 +3765,17 @@ function renderProgressChart(){
     var meso=getMesoById(segSelectedMacro,plan.mesoId);
     var pct=null;
     if(meso){
-      var req=meso.sessions.filter(function(s){return s.req;}).length;
+      var planSessions2=(plan&&plan.sessions)?plan.sessions:{};
+      function isReq2(s){
+        if(planSessions2[s.t]==='forzoso') return true;
+        if(planSessions2[s.t]==='opcional') return false;
+        return s.req;
+      }
+      var reqS=meso.sessions.filter(isReq2);
+      var req=reqS.length;
       if(req>0){
         var done=0;
-        meso.sessions.filter(function(s){return s.req;}).forEach(function(s){
+        reqS.forEach(function(s){
           if(logs.some(function(l){return l.type===s.t;})) done++;
         });
         pct=Math.round(done/req*100);
