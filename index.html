@@ -329,7 +329,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
 </div>
 
 <div class="topnav">
-  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-11 15:14 CLT</span></div>
+  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-11 15:24 CLT</span></div>
   <div class="nav-right">
     <div class="month-label" id="mLbl"></div>
     <button class="mnav-btn" onclick="chM(-1)">&#8592;</button>
@@ -5914,9 +5914,22 @@ function saveSessionStatus(macId,week,type,val){
       var wk  = parsed.week;
       if (!runLog[mac]) runLog[mac] = {};
       if (!runLog[mac][wk]) runLog[mac][wk] = [];
-      // Skip if an entry with the same date already exists (manual or prior sync)
-      var alreadyThere = runLog[mac][wk].some(function(e){ return e.date === r.local_date; });
-      if (alreadyThere) continue;
+      // If entry exists: update speed if it was empty (backfill from description)
+      var existingEntry = null;
+      for (var ei=0; ei<runLog[mac][wk].length; ei++){
+        if (runLog[mac][wk][ei].date === r.local_date){ existingEntry = runLog[mac][wk][ei]; break; }
+      }
+      if (existingEntry){
+        // Backfill speed + dist if missing
+        if ((!existingEntry.speed || existingEntry.speed==='') && parsed.speed){
+          existingEntry.speed = parsed.speed;
+          added++;
+        }
+        if ((!existingEntry.dist || existingEntry.dist===0) && r.distance_m){
+          existingEntry.dist = parseFloat(((r.distance_m||0)/1000).toFixed(2));
+        }
+        continue;
+      }
       runLog[mac][wk].push({
         type:  parsed.type,
         dist:  parseFloat(((r.distance_m||0)/1000).toFixed(2)),
