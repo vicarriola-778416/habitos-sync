@@ -329,7 +329,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
 </div>
 
 <div class="topnav">
-  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-07 11:51 CLT</span></div>
+  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-07 12:05 CLT</span></div>
   <div class="nav-right">
     <div class="month-label" id="mLbl"></div>
     <button class="mnav-btn" onclick="chM(-1)">&#8592;</button>
@@ -340,7 +340,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
     <button class="export-btn-nav" id="garminBtn" onclick="garminOpenPanel()" title="Garmin / Google Fit sync">
       <span id="garminBtnLabel">◎ garmin</span>
     </button>
-    <button class="export-btn-nav" id="exportBtnNav" onclick="exportState()" title="Respaldo manual (JSON)">
+    <button class="export-btn-nav" id="exportBtnNav" onclick="exportState()" title="Guardar ahora">
       <div class="dirty-dot"></div>
       <span id="cloudSaveLabel"><span class="cloud-state-dot ok" id="cloudSaveDot"></span>guardado</span>
     </button>
@@ -2231,30 +2231,18 @@ var runLog  = {mac1:{},mac2:{},mac3:{}};
 
 // ── EXPORT ────────────────────────────────────────────────────────────
 function exportState() {
-  var state = {
-    habits:      tData,
-    runPlan:     runPlan,
-    runLog:      runLog,
-    escPlan:     escPlan,
-    escLog:      escLog,
-    escProjects: escProjects,
-    peakForce:   peakForce,
-    weightData:  weightData
-  };
-  var json = JSON.stringify(state, null, 2);
+  // Force an immediate cloud save
+  if (typeof window._forceCloudSave === 'function') {
+    window._forceCloudSave();
+  }
   var btn = document.getElementById('exportBtnNav');
-  var done = function() {
-    btn.classList.remove('dirty');
-    btn.classList.add('copied');
-    btn.querySelector('span').textContent = 'copiado!';
-    setTimeout(function() {
-      btn.classList.remove('copied');
-      btn.querySelector('span').textContent = '\u2191 exportar estado';
-    }, 2000);
-  };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(json).then(done).catch(function() { fallbackCopy(json, done); });
-  } else { fallbackCopy(json, done); }
+  btn.classList.remove('dirty');
+  btn.classList.add('copied');
+  btn.querySelector('span').innerHTML = '<span class="cloud-state-dot ok" id="cloudSaveDot"></span>guardado!';
+  setTimeout(function() {
+    btn.classList.remove('copied');
+    btn.querySelector('span').innerHTML = '<span class="cloud-state-dot ok" id="cloudSaveDot"></span>guardado';
+  }, 2000);
 }
 function fallbackCopy(text, cb) {
   var ta = document.createElement('textarea');
@@ -5680,6 +5668,8 @@ function saveSessionStatus(macId,week,type,val){
     try { _origMarkDirty && _origMarkDirty(); } catch(e){}
     scheduleSave();
   };
+  // Expose for the save button
+  window._forceCloudSave = saveNow;
 
   // Magic-link login
   window.cloudSendMagicLink = async function(){
