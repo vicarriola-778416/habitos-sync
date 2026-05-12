@@ -329,7 +329,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
 </div>
 
 <div class="topnav">
-  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-12d CLT</span></div>
+  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-12f CLT</span></div>
   <div class="nav-right">
     <div class="month-label" id="mLbl"></div>
     <button class="mnav-btn" onclick="chM(-1)">&#8592;</button>
@@ -3738,16 +3738,37 @@ function renderSegDetail(){
     if(planSessions[s.t]==='opcional') return false;
     return s.req;
   }
-  meso.sessions.forEach(function(s){
-    var req=effectiveReq(s);
-    var done=logs.filter(function(l){return l.type===s.t;});
+  // Canonical run-type order, used to ensure we render every type that's
+  // either part of the meso, overridden in plan.sessions, or logged this week.
+  var ALL_RTYPES = ['Easy','Intervals','ST','MT','LT','Long'];
+  // Build a lookup of meso sessions by type for default km values.
+  var mesoByType = {};
+  meso.sessions.forEach(function(s){ mesoByType[s.t] = s; });
+  ALL_RTYPES.forEach(function(t){
+    var mesoS = mesoByType[t];
+    var inMeso = !!mesoS;
+    var planVal = planSessions[t];
+    var loggedHere = logs.some(function(l){return l.type===t;});
+    // Skip rows that have no meaning for this week: not in meso, no plan
+    // override, and not logged. Also skip if plan explicitly says "nada".
+    if (planVal === 'nada' && !loggedHere) return;
+    if (!inMeso && !planVal && !loggedHere) return;
+    var isExtra = !inMeso && !planVal; // logged but not planned at all
+    var req;
+    if (planVal === 'forzoso') req = true;
+    else if (planVal === 'opcional') req = false;
+    else req = mesoS ? mesoS.req : false;
+    var done=logs.filter(function(l){return l.type===t;});
     var hasDone=done.length>0;
     var checkClass=hasDone?'ok':(req?'miss':'opt');
     var checkIcon=hasDone?'✓':(req?'✕':'—');
-    var c=TYPE_COLORS[s.t]||'#888';
+    var c=TYPE_COLORS[t]||'#888';
+    var km = mesoS ? mesoS.km : '—';
+    var statusLabel = isExtra ? ' · extra' : (req ? ' · forzoso' : ' · opcional');
+    var plannedStyle = isExtra ? ' style="color:var(--dim)"' : '';
     html+='<div class="comp-row">'
-      +'<div class="comp-type" style="color:'+c+'">'+s.t+'</div>'
-      +'<div class="comp-planned">'+s.km+(req?' · forzoso':' · opcional')+'</div>'
+      +'<div class="comp-type" style="color:'+c+'">'+t+'</div>'
+      +'<div class="comp-planned"'+plannedStyle+'>'+km+statusLabel+'</div>'
       +'<div class="comp-done">'+(hasDone?done.map(function(l){return (l.dist>0?l.dist+'km ':'')+l.speed;}).join(', '):'—')+'</div>'
       +'<div class="comp-check '+checkClass+'">'+checkIcon+'</div>'
       +'</div>';
