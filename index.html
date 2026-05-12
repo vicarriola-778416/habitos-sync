@@ -329,7 +329,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
 </div>
 
 <div class="topnav">
-  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-11 15:24 CLT</span></div>
+  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-12 CLT</span></div>
   <div class="nav-right">
     <div class="month-label" id="mLbl"></div>
     <button class="mnav-btn" onclick="chM(-1)">&#8592;</button>
@@ -3124,7 +3124,9 @@ var MESOS = {
     {id:'tuning',  name:'Tuning (Speed)',color:'#e03050', weeks:[20,21],
      sessions:[{t:'Intervals',km:'6x1k',req:true},{t:'ST',km:'5k',req:true},{t:'LT',km:'12-16k',req:true},{t:'Long',km:'—',req:false}]},
     {id:'taper',   name:'Taper',         color:'#b08000', weeks:[22,23],
-     sessions:[{t:'Intervals',km:'3x1k',req:true},{t:'ST',km:'3-5k',req:true},{t:'MT',km:'5k',req:true},{t:'Long',km:'—',req:false}]}
+     sessions:[{t:'Intervals',km:'3x1k',req:true},{t:'ST',km:'3-5k',req:true},{t:'MT',km:'5k',req:true},{t:'Long',km:'—',req:false}]},
+    {id:'down_rest', name:'Down/Rest',   color:'#5a6478', weeks:[],
+     sessions:[{t:'Easy',km:'5-8k',req:false},{t:'Long',km:'—',req:false}]}
   ],
   mac2: [
     {id:'rec2',    name:'Recovery',      color:'#9b6b3a',
@@ -3134,7 +3136,9 @@ var MESOS = {
     {id:'mant_mt', name:'Mantener MT',   color:'#1a9e50',
      sessions:[{t:'Easy',km:'10k',req:false},{t:'Intervals',km:'3x1k',req:true},{t:'ST',km:'5k',req:true},{t:'MT',km:'7k',req:true}]},
     {id:'mant_lt', name:'Mantener LT',   color:'#7c5cbf',
-     sessions:[{t:'Easy',km:'10k',req:false},{t:'Intervals',km:'3x1k',req:true},{t:'ST',km:'5k',req:true},{t:'LT',km:'12k',req:true},{t:'Long',km:'15-20k',req:false}]}
+     sessions:[{t:'Easy',km:'10k',req:false},{t:'Intervals',km:'3x1k',req:true},{t:'ST',km:'5k',req:true},{t:'LT',km:'12k',req:true},{t:'Long',km:'15-20k',req:false}]},
+    {id:'down_rest2', name:'Down/Rest', color:'#5a6478',
+     sessions:[{t:'Easy',km:'5-8k',req:false},{t:'Long',km:'—',req:false}]}
   ],
   mac3: [
     {id:'rec3',    name:'Recovery',      color:'#9b6b3a',
@@ -3144,7 +3148,9 @@ var MESOS = {
     {id:'mant_mt3',name:'Mantener MT',   color:'#1a9e50',
      sessions:[{t:'Easy',km:'10k',req:false},{t:'Intervals',km:'3x1k',req:true},{t:'ST',km:'5k',req:true},{t:'MT',km:'7k',req:true}]},
     {id:'mant_lt3',name:'Mantener LT',   color:'#7c5cbf',
-     sessions:[{t:'Easy',km:'10k',req:false},{t:'Intervals',km:'3x1k',req:true},{t:'ST',km:'5k',req:true},{t:'LT',km:'12k',req:true},{t:'Long',km:'15-20k',req:false}]}
+     sessions:[{t:'Easy',km:'10k',req:false},{t:'Intervals',km:'3x1k',req:true},{t:'ST',km:'5k',req:true},{t:'LT',km:'12k',req:true},{t:'Long',km:'15-20k',req:false}]},
+    {id:'down_rest3', name:'Down/Rest', color:'#5a6478',
+     sessions:[{t:'Easy',km:'5-8k',req:false},{t:'Long',km:'—',req:false}]}
   ]
 };
 
@@ -5856,10 +5862,11 @@ function saveSessionStatus(macId,week,type,val){
   // Recognised types: Easy, Long, Intervals, ST, MT.
   // Speed: N<digits> with optional trailing "+" (N1, N11, N17, N17+), or
   // "Easy" when type is Easy and no N-label found.
-  function parseStravaName(name, desc){
+  function parseStravaName(name, desc, extra){
     var n = name || '';
     var d = desc || '';
-    if (!n && !d) return { week:null, type:null, speed:null };
+    var e = extra || ''; // private_note / comments / any extra text source
+    if (!n && !d && !e) return { week:null, type:null, speed:null };
     var wMatch = n.match(/(?:^|\s)W(\d+)(?:\b|$)/i);
     var week = wMatch ? parseInt(wMatch[1], 10) : null;
     var type = null;
@@ -5868,13 +5875,40 @@ function saveSessionStatus(macId,week,type,val){
     else if (/\bMT\b/.test(n))                   type = 'MT';
     else if (/\bLong\b/i.test(n))                type = 'Long';
     else if (/\bEasy\b/i.test(n))                type = 'Easy';
-    // Look in title first, then description. Accept optional trailing +.
+    // Look in title first, then description, then extra (private_note/comments).
+    // Accept optional trailing +.
     var rx = /\bN(\d{1,2}\+?)/i;
-    var sMatch = n.match(rx) || d.match(rx);
+    var sMatch = n.match(rx) || d.match(rx) || e.match(rx);
     var speed = null;
     if (sMatch)            speed = 'N' + sMatch[1];
     else if (type==='Easy') speed = 'Easy';
     return { week: week, type: type, speed: speed };
+  }
+
+  // Pull every text-ish field from Strava's raw activity that could contain
+  // notes: private_note + any field whose name contains "comment" or "note".
+  // Returns one concatenated string, safe to feed to the Nx regex.
+  function extractStravaNotes(raw){
+    if (!raw || typeof raw !== 'object') return '';
+    var parts = [];
+    if (typeof raw.private_note === 'string' && raw.private_note) parts.push(raw.private_note);
+    for (var k in raw){
+      if (!Object.prototype.hasOwnProperty.call(raw, k)) continue;
+      if (k === 'private_note' || k === 'description' || k === 'name') continue;
+      if (!/comment|note/i.test(k)) continue;
+      var v = raw[k];
+      if (typeof v === 'string' && v) parts.push(v);
+      else if (Array.isArray(v)){
+        v.forEach(function(it){
+          if (typeof it === 'string') parts.push(it);
+          else if (it && typeof it === 'object'){
+            if (typeof it.text === 'string') parts.push(it.text);
+            if (typeof it.body === 'string') parts.push(it.body);
+          }
+        });
+      }
+    }
+    return parts.join(' \n ');
   }
 
   // Pick the macrocycle this week belongs to. Heuristic: whichever macX
@@ -5908,7 +5942,8 @@ function saveSessionStatus(macId,week,type,val){
       var r = runs[i];
       if (r.type !== 'Run') continue; // ignore Rides etc.
       var desc = (r.raw && r.raw.description) || '';
-      var parsed = parseStravaName(r.name, desc);
+      var extra = extractStravaNotes(r.raw); // private_note + comment/note fields
+      var parsed = parseStravaName(r.name, desc, extra);
       if (!parsed.week || !parsed.type) continue; // needs both to auto-map
       var mac = pickMacForWeek(parsed.week);
       var wk  = parsed.week;
