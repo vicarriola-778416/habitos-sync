@@ -329,7 +329,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
 </div>
 
 <div class="topnav">
-  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-12b CLT</span></div>
+  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-12d CLT</span></div>
   <div class="nav-right">
     <div class="month-label" id="mLbl"></div>
     <button class="mnav-btn" onclick="chM(-1)">&#8592;</button>
@@ -3603,19 +3603,27 @@ function renderRegRight(){
   var html='';
   // meso plan reminder
   if(meso){
+    // Respect per-week forzoso/opcional override from diseño.
+    var planSessRR = (plan && plan.sessions) ? plan.sessions : {};
+    function effReqRR(s){
+      if(planSessRR[s.t]==='forzoso') return true;
+      if(planSessRR[s.t]==='opcional') return false;
+      return s.req;
+    }
     html+='<div class="section-hdr">plan sem '+week+' — '+meso.name+'</div>';
     html+='<div class="session-grid" style="margin-bottom:14px">';
     meso.sessions.forEach(function(s){
+      var req=effReqRR(s);
       var c=TYPE_COLORS[s.t]||'#888';
       var planSpeed=(plan.speeds&&plan.speeds[s.t])?plan.speeds[s.t]:'';
       var logs2=runLog[mac]&&runLog[mac][week]?runLog[mac][week]:[];
       var done2=logs2.filter(function(l){return l.type===s.t;});
       var isDone2=done2.length>0;
-      html+='<div class="session-card '+(s.req?'required':'optional')+'" style="position:relative">'
+      html+='<div class="session-card '+(req?'required':'optional')+'" style="position:relative">'
         +(isDone2?'<div style="position:absolute;top:4px;right:6px;font-size:.46rem;color:var(--green)">✓</div>':'')
         +'<div class="session-type" style="color:'+c+'">'+s.t+'</div>'
         +'<div class="session-km">'+s.km+(planSpeed?' <span style="color:var(--blue);font-weight:500">'+planSpeed+'</span>':'')+'</div>'
-        +'<span class="session-badge '+(s.req?'req':'opt')+'">'+(s.req?'forzoso':'opcional')+'</span>'
+        +'<span class="session-badge '+(req?'req':'opt')+'">'+(req?'forzoso':'opcional')+'</span>'
         +'</div>';
     });
     html+='</div>';
@@ -3723,15 +3731,23 @@ function renderSegDetail(){
   var html='<div class="comp-detail">'
     +'<div class="comp-title">sem '+w+' — '+meso.name+' — '+weekDates(mid,w)+(plan.cerro?' — '+plan.cerro:'')+'</div>';
 
+  // Respect per-week forzoso/opcional override from diseño (same logic as compliance %).
+  var planSessions = (plan && plan.sessions) ? plan.sessions : {};
+  function effectiveReq(s){
+    if(planSessions[s.t]==='forzoso') return true;
+    if(planSessions[s.t]==='opcional') return false;
+    return s.req;
+  }
   meso.sessions.forEach(function(s){
+    var req=effectiveReq(s);
     var done=logs.filter(function(l){return l.type===s.t;});
     var hasDone=done.length>0;
-    var checkClass=hasDone?'ok':(s.req?'miss':'opt');
-    var checkIcon=hasDone?'✓':(s.req?'✕':'—');
+    var checkClass=hasDone?'ok':(req?'miss':'opt');
+    var checkIcon=hasDone?'✓':(req?'✕':'—');
     var c=TYPE_COLORS[s.t]||'#888';
     html+='<div class="comp-row">'
       +'<div class="comp-type" style="color:'+c+'">'+s.t+'</div>'
-      +'<div class="comp-planned">'+s.km+(s.req?' · forzoso':' · opcional')+'</div>'
+      +'<div class="comp-planned">'+s.km+(req?' · forzoso':' · opcional')+'</div>'
       +'<div class="comp-done">'+(hasDone?done.map(function(l){return (l.dist>0?l.dist+'km ':'')+l.speed;}).join(', '):'—')+'</div>'
       +'<div class="comp-check '+checkClass+'">'+checkIcon+'</div>'
       +'</div>';
@@ -5862,6 +5878,32 @@ function saveSessionStatus(macId,week,type,val){
   // Recognised types: Easy, Long, Intervals, ST, MT.
   // Speed: N<digits> with optional trailing "+" (N1, N11, N17, N17+), or
   // "Easy" when type is Easy and no N-label found.
+  // Convert "M:SS" pace string → total seconds. Returns null if invalid.
+  function paceStrToSec(p){
+    if (!p) return null;
+    var m = p.match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    return parseInt(m[1],10)*60 + parseInt(m[2],10);
+  }
+  // Given a pace in seconds, find the SPEEDS entry with the closest pace and
+  // return its label (e.g. "N15"). Used as fallback when no explicit Nx is
+  // present in title/desc/extra. Tie-breaks toward the faster (higher N) side
+  // so a 4:30 pace maps to N8 (4:28) rather than N7 (4:32).
+  function paceToNearestNLevel(paceSec){
+    if (typeof SPEEDS === 'undefined' || !paceSec) return null;
+    var best = null, bestDiff = Infinity;
+    for (var i = 0; i < SPEEDS.length; i++){
+      var sp = paceStrToSec(SPEEDS[i].pace);
+      if (sp == null) continue;
+      var diff = Math.abs(sp - paceSec);
+      // strict < means ties keep the earlier (slower) entry; we want the
+      // faster one on tie, so use <= and iterate slow→fast (which the array
+      // already does: Easy, N1, … N20).
+      if (diff <= bestDiff){ bestDiff = diff; best = SPEEDS[i].label; }
+    }
+    return best;
+  }
+
   function parseStravaName(name, desc, extra){
     var n = name || '';
     var d = desc || '';
@@ -5885,6 +5927,18 @@ function saveSessionStatus(macId,week,type,val){
     var speed = null;
     if (sMatch)            speed = 'N' + sMatch[1];
     else if (type==='Easy') speed = 'Easy';
+    // Pace fallback: if no Nx anywhere, look for "@H:MM" in title (e.g. "@ 4:04")
+    // and map to the nearest N-level from SPEEDS. Description and extra also
+    // checked as last-resort sources.
+    if (!speed){
+      var paceRx = /@\s*(\d{1,2}):(\d{2})/;
+      var pMatch = n.match(paceRx) || d.match(paceRx) || e.match(paceRx);
+      if (pMatch){
+        var paceSec = parseInt(pMatch[1],10)*60 + parseInt(pMatch[2],10);
+        var nearest = paceToNearestNLevel(paceSec);
+        if (nearest) speed = nearest;
+      }
+    }
     return { week: week, type: type, speed: speed };
   }
 
