@@ -329,7 +329,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;disp
 </div>
 
 <div class="topnav">
-  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-12 CLT</span></div>
+  <div class="brand"><h1>habitos</h1><span class="brand-sub">2026</span><span style="font-size:.38rem;color:var(--dim);margin-left:8px;font-weight:400">v2026-05-12b CLT</span></div>
   <div class="nav-right">
     <div class="month-label" id="mLbl"></div>
     <button class="mnav-btn" onclick="chM(-1)">&#8592;</button>
@@ -5870,9 +5870,12 @@ function saveSessionStatus(macId,week,type,val){
     var wMatch = n.match(/(?:^|\s)W(\d+)(?:\b|$)/i);
     var week = wMatch ? parseInt(wMatch[1], 10) : null;
     var type = null;
-    if (/\bintervals?\b|\btempo\b/i.test(n))     type = 'Intervals';
-    else if (/\bST\b/.test(n))                   type = 'ST';
-    else if (/\bMT\b/.test(n))                   type = 'MT';
+    // LT first — has to win over the generic /tempo/ match in titles like
+    // "W16 LT Long Tempo 12k". Allow optional digit suffix (LT2, LT3…).
+    if (/\bLT\d*\b/.test(n))                     type = 'LT';
+    else if (/\bMT\d*\b/.test(n))                type = 'MT';
+    else if (/\bST\d*\b/.test(n))                type = 'ST';
+    else if (/\bintervals?\b|\btempo\b/i.test(n)) type = 'Intervals';
     else if (/\bLong\b/i.test(n))                type = 'Long';
     else if (/\bEasy\b/i.test(n))                type = 'Easy';
     // Look in title first, then description, then extra (private_note/comments).
